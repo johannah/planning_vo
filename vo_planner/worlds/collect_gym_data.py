@@ -6,6 +6,10 @@ import matplotlib.pyplot as plt
 from IPython import embed
 import time
 from copy import copy
+import os
+
+NUM_EPISODES = 20
+save_data_file = 'human_road'
 
 if __name__ == '__main__':
     from pyglet.window import key
@@ -44,7 +48,7 @@ if __name__ == '__main__':
     all_states = []
     all_actions = []
     all_roads = []
-    for xxx in range(10):
+    for xxx in range(NUM_EPISODES):
         track = env.reset()
         all_roads.append((track))
         total_reward = 0.0
@@ -75,4 +79,9 @@ if __name__ == '__main__':
                 all_actions.append(actions)
                 break
     env.close()
-    np.savez('human_road', states=all_states, roads=all_roads, actions=all_actions)
+    if os.path.exists(save_data_file+'.npz'):
+        data = np.load(save_data_file+'.npz')
+        all_states.extend(data['states'])
+        all_roads.extend(data['actions'])
+        all_actions.extend(data['actions'])
+    np.savez(save_data_file, states=all_states, roads=all_roads, actions=all_actions)
