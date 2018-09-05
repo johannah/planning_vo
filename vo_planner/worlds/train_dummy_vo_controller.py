@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 import time
 import os, sys
-import torch 
+import torch
 import torch.nn as nn
 from torch.nn.utils.clip_grad import clip_grad_norm
 import torch.nn.functional as F
@@ -41,10 +41,10 @@ class LSTM(nn.Module):
 
 def train(x, y, e,do_save=False):
     optim.zero_grad()
-    h1_tm1 = Variable(torch.zeros((batch_size, hidden_size)))
-    c1_tm1 = Variable(torch.zeros((batch_size, hidden_size)))
-    h2_tm1 = Variable(torch.zeros((batch_size, hidden_size)))
-    c2_tm1 = Variable(torch.zeros((batch_size, hidden_size)))
+    h1_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
+    c1_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
+    h2_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
+    c2_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
     outputs = []
     losses = []
     # one batch of x
@@ -63,10 +63,10 @@ def train(x, y, e,do_save=False):
     if do_save:
         ll = mse_loss.cpu().data.numpy()
         print('saving after example {} loss {}'.format(e,ll))
-        state = {'epoch':e, 
+        state = {'epoch':e,
                 'loss':ll,
-                'state_dict':lstm.state_dict(), 
-                'optimizer':optim.state_dict(), 
+                'state_dict':lstm.state_dict(),
+                'optimizer':optim.state_dict(),
                  }
         filename = os.path.join(savedir, 'model_epoch_%015d.pkl'%e)
         save_checkpoint(state, filename=filename)
@@ -103,10 +103,10 @@ def load_data(load_path):
 def teacher_force_predict(x, y):
     # not done
     optim.zero_grad()
-    h1_tm1 = Variable(torch.zeros((batch_size, hidden_size)))
-    c1_tm1 = Variable(torch.zeros((batch_size, hidden_size)))
-    h2_tm1 = Variable(torch.zeros((batch_size, hidden_size)))
-    c2_tm1 = Variable(torch.zeros((batch_size, hidden_size)))
+    h1_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
+    c1_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
+    h2_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
+    c2_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
     outputs = []
     # one batch of x
     for i in np.arange(0,x.shape[0]-history_size):
@@ -136,7 +136,7 @@ def predict(x, y):
         last_state_est = x[i]
         last_state_est[:,5:7] = output
         input_data = torch.cat((input_data[1:], last_state_est[None]), 0).reshape(x.shape[1],history_size*x.shape[2])
-      
+
     y_pred = torch.stack(outputs, 0)
     #print(y_pred.shape)
     mse_loss = ((y_pred-y[:-history_size])**2).mean()
@@ -149,15 +149,15 @@ def loop(xvar,yvar,num_epochs=1000,cnt=0,save_every=10000):
     aloss = []
     last_save = cnt
     for e in range(num_epochs):
-        if not e%10:
+        if not e%10 and e>0:
             tst = round((time.time()-st)/60., 0)
-            print("starting epoch %s, %s mins after start, seen %s" %(e, tst, cnt))
+            print("starting epoch %s, %s mins after start, loss %s, seen %s" %(e, tst, aloss[-1], cnt))
         batch_loss = []
         for bst in np.arange(0, xvar.shape[1]-batch_size, batch_size, dtype=np.int):
             cnt+=(bst+batch_size)
             xd = xvar[:,bst:bst+batch_size].to(DEVICE)
             yd = yvar[:,bst:bst+batch_size].to(DEVICE)
-            if cnt-last_save > save_every:  
+            if cnt-last_save > save_every:
                 print("do save", e, cnt)
                 y_pred, mean_loss = train(xd, yd, cnt, True)
                 last_save = cnt
@@ -208,16 +208,17 @@ if __name__ == '__main__':
     output_size = 2
     batch_size = 10
     history_size = 4
-    savedir = 'models' 
+    savedir = 'models'
     cnt = 0
-    model_load_path = 'models/model_epoch_24145030.pkl' 
+    model_load_path = 'models/model_epoch_24145030.pkl'
     if not os.path.exists(savedir):
         os.makedirs(savedir)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cuda', action='store_true', default=False)
     parser.add_argument('-m', '--model_loadname', default=model_load_path)
-    parser.add_argument('-se', '--save_every', default=10000, help='how often to save training model')
+    parser.add_argument('-se', '--save_every',
+                        default=1e9, help='how often to save training model')
     parser.add_argument('--limit', default=-1, type=int, help='limit training data to reduce convergence time')
     parser.add_argument('-l', '--load', action='store_true', default=False, help='load model to continue training or to generate. model path is specified with -m')
     parser.add_argument('-v', '--validate', action='store_true', default=False, help='test results')
@@ -237,7 +238,7 @@ if __name__ == '__main__':
     valid_x_tensor, valid_y_tensor = load_data("test_2d_controller.npz")
     input_size = x_tensor.shape[2]*history_size
     lstm = LSTM(input_size=input_size, output_size=output_size, hidden_size=hidden_size).to(DEVICE)
-    optim = torch.optim.Adam(lstm.parameters(), lr=1e-5) 
+    optim = torch.optim.Adam(lstm.parameters(), lr=1e-5)
     limit = min(x_tensor.shape[1], args.limit)
     if args.load:
         if not os.path.exists(model_load_path):
@@ -252,7 +253,7 @@ if __name__ == '__main__':
             # todo losses
 
     loop(x_tensor[:,:limit], y_tensor[:,:limit], save_every=save_every, cnt=cnt)
-    
+
     embed()
     #tf_trues, tf_predicts, tf_batch_loss = valid_loop(teacher_force_predict, valid_x_tensor, valid_y_tensor)
     #trues, predicts, batch_loss = valid_loop(predict, valid_x_tensor, valid_y_tensor)
