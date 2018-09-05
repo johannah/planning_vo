@@ -155,8 +155,8 @@ def loop(xvar,yvar,num_epochs=1000,cnt=0,save_every=10000):
         batch_loss = []
         for bst in np.arange(0, xvar.shape[1]-batch_size, batch_size, dtype=np.int):
             cnt+=(bst+batch_size)
-            xd = xvar[:,bst:bst+batch_size]
-            yd = yvar[:,bst:bst+batch_size]
+            xd = xvar[:,bst:bst+batch_size].to(DEVICE)
+            yd = yvar[:,bst:bst+batch_size].to(DEVICE)
             if cnt-last_save > save_every:  
                 print("do save", e, cnt)
                 y_pred, mean_loss = train(xd, yd, cnt, True)
@@ -184,8 +184,8 @@ def valid_loop(function, xvar, yvar):
     batch_loss = []
     for bst in np.arange(0, xvar.shape[1]-batch_size, batch_size, dtype=np.int):
         cnt+=(bst+batch_size)
-        xd = xvar[:,bst:bst+batch_size]
-        yd = yvar[:,bst:bst+batch_size]
+        xd = xvar[:,bst:bst+batch_size].to(DEVICE)
+        yd = yvar[:,bst:bst+batch_size].to(DEVICE)
         y_pred, losses = function(xd, yd)
         predicts[bst:bst+batch_size,:] = y_pred
         trues[bst:bst+batch_size,:] = yd.detach().numpy()
@@ -213,7 +213,6 @@ if __name__ == '__main__':
     model_load_path = 'models/model_epoch_24145030.pkl' 
     if not os.path.exists(savedir):
         os.makedirs(savedir)
-    mse_loss = nn.MSELoss()
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cuda', action='store_true', default=False)
@@ -224,13 +223,21 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--validate', action='store_true', default=False, help='test results')
 
     args = parser.parse_args()
+
+    if args.cuda:
+        DEVICE = 'cuda'
+    else:
+        DEVICE = 'cpu'
+
+    mse_loss = nn.MSELoss().to(DEVICE)
+
     save_every = args.save_every
     # load train and test set
     x_tensor, y_tensor = load_data("train_2d_controller.npz")
     valid_x_tensor, valid_y_tensor = load_data("test_2d_controller.npz")
     input_size = x_tensor.shape[2]*history_size
-    lstm = LSTM(input_size=input_size, output_size=output_size, hidden_size=hidden_size)
-    optim = torch.optim.Adam(lstm.parameters()) 
+    lstm = LSTM(input_size=input_size, output_size=output_size, hidden_size=hidden_size).to(DEVICE)
+    optim = torch.optim.Adam(lstm.parameters(), lr=1e-5) 
     limit = min(x_tensor.shape[1], args.limit)
     if args.load:
         if not os.path.exists(model_load_path):
