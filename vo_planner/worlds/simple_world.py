@@ -32,10 +32,11 @@ max_pixel = min(goal_pixel, obstacle_pixel, robot_pixel, true_robot_pixel)
 
 class Particle():
     def __init__(self, world, name, local_map, init_y, init_x,
-                 angle, speed, clear_map=False,
+                 angle, speed, clear_map=False, bearing=90.0,
                  bounce=True, bounce_angle=45, entire_body_outside=True,
                  color=12, ymarkersize=3, xmarkersize=3):
 
+        self.bearing = bearing
         # if object is bouncy - markersize offsets must be possitive!
         if bounce:
             assert(ymarkersize>0)
@@ -70,17 +71,24 @@ class Particle():
     def step(self, timestep):
         # (meters/second) * second
         # TODO angle
-        rads = np.deg2rad(self.angle)
+        self.bearing = (self.bearing+self.angle)%360
+        rads = np.deg2rad(self.bearing)
         #if self.name == 'robot':
-        #    print("robot step", self.y, self.x, self.speed)
+        #    print("robot step", self.y, self.x, self.speed, self.angle)
         self.y = self.y + self.speed*np.sin(rads)*timestep
         self.x = self.x + self.speed*np.cos(rads)*timestep
         self.plot(self.y, self.x)
+        #if self.name == 'robot':
+        #    print("after robot STEP", self.y, self.x, self.speed, self.angle)
+        #    if not self.alive:
+        #        print("PARTICLE STEP ROBOT DIED after robot step", self.y, self.x, self.speed, self.angle)
+        #        #embed()
         return self.alive
 
-    def set_state(self,y,x):
+    def set_state(self,y,x,b):
         self.y = y
         self.x = x
+        self.bearing = b
         self.plot(self.y, self.x)
         return self.alive
 
@@ -175,7 +183,7 @@ class Particle():
 
 class SimpleEnv():
     def __init__(self, random_state, ysize, xsize, obstacle_types="NONE",
-                 timestep=1,level=1, num_angles=3, agent_max_speed=1.0):
+                 timestep=1,level=1, num_angles=5, agent_max_speed=1.0):
         # TODO - what if episode already exists in savedir
         self.rdn = random_state
         if obstacle_types == "NONE":
@@ -216,16 +224,26 @@ class SimpleEnv():
         self.max_steps = int(3*(np.sqrt(self.ysize**2 + self.xsize**2)/float(self.max_speed))/float(self.timestep))
         self.lose_reward = -20
         self.win_reward = np.abs(self.lose_reward)
+        #         90
+        #  135 \  | / 45
+        #   180  ---  0
+        #  225  / | \ 315
+        #        270
+
+
+        # BELOW IS NOT RIGHT -- but at one point i thought it was apparently
         #      90
         #      |
         # 180 --- 0
         #      |
         #     270
 
+
         #self.angles = np.linspace(0, 180, 5)[::-1]
         #self.speeds = np.linspace(.1,self.max_speed,3)
-        #self.angles = np.linspace(-180, 180, num_angles, endpoint=False)
-        self.action_angles = np.linspace(135, 45, num_angles, endpoint=True)
+        # below is correct if you do have heading TODO - implement heading
+        self.action_angles = np.linspace(125, 35, num_angles, endpoint=True)
+        #self.action_angles = np.linspace(1, 359, num_angles, endpoint=True)
         self.speeds = [self.max_speed]
         self.actions = []
         for s in self.speeds:
@@ -244,7 +262,7 @@ class SimpleEnv():
         return (self.lose_reward/2.0)*(state_index/float(self.max_steps))
 
     def get_win_reward(self, state_index):
-        print('win reward', state_index, self.win_reward + self.get_step_penalty(state_index))
+        #print('win reward', state_index, self.win_reward + self.get_step_penalty(state_index))
         return self.win_reward + self.get_step_penalty(state_index)
 
     def get_step_penalty(self, state_index):
@@ -271,7 +289,7 @@ class SimpleEnv():
             return True, self.get_lose_reward(state_index)
         else:
             # check for collisions
-            ry, rx = self.get_robot_state(state)
+            ry, rx,rb = self.get_robot_state(state)
             rmap = deepcopy(state[1])
             goal_loc = self.get_goal_from_state(state)
             rmap[goal_loc] -= self.goal.color
@@ -290,6 +308,7 @@ class SimpleEnv():
     def get_robot_state(self,state):
         ry = int(np.rint(state[0][0]*self.ysize))
         rx = int(np.rint(state[0][1]*self.xsize))
+        rb = state[0][2]
         if ry>self.ysize-1:
             ry = self.ysize-1
         if rx>self.xsize-1:
@@ -298,15 +317,15 @@ class SimpleEnv():
             rx = 0
         if ry<0:
             ry = 0
-        return (ry,rx)
+        return (ry,rx,rb)
 
-    def get_goal_bearing(self,state):
-        gy,gx = self.get_goal_state(state)
-        ry,rx = self.get_robot_state(state)
-        dy = gy-ry
-        dx = gx-rx
-        goal_angle = np.rad2deg(math.atan2(dy,dx))
-        return goal_angle
+    def get_goal_bearing(self,rloc, gloc, my_bearing):
+        dy = gloc[0]-rloc[0]
+        dx = gloc[1]-rloc[1]
+        bearing = np.rad2deg(math.atan2(dy,dx))
+        my_diff_from_90 = (90-my_bearing)%360
+        new_bearing = (bearing+my_diff_from_90)%360
+        return new_bearing
 
     def get_data_from_fig(self):
         data = np.fromstring(self.fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
@@ -317,17 +336,16 @@ class SimpleEnv():
 
     def create_goal(self, goal_distance):
         print("Creating goal")
-        goal_ymin = max([self.robot.y-goal_distance, 2])
-        goal_ymax = min([self.robot.y+goal_distance, self.ysize-2])
-        assert goal_ymin > 0
-        assert goal_ymax < self.ysize
-        goal_xmin = max([self.robot.x-goal_distance, 2])
-        goal_xmax = min([self.robot.x+goal_distance, self.xsize-2])
-        assert goal_xmin > 0
-        assert goal_xmax < self.xsize
-
+        goal_ymin = max([self.robot.y-goal_distance+(self.robot.ymarkersize+1), (self.robot.ymarkersize+1)])
+        goal_ymax = min([self.robot.y+goal_distance+(self.robot.ymarkersize+1), self.ysize-(self.robot.ymarkersize+1)])
+        goal_xmin = max([self.robot.x-goal_distance-(self.robot.xmarkersize+1), self.robot.xmarkersize+1])
+        goal_xmax = min([self.robot.x+goal_distance, self.xsize-(self.robot.xmarkersize+1)])
         goal_y = float(self.rdn.randint(goal_ymin,goal_ymax))
         goal_x = float(self.rdn.randint(goal_xmin,goal_xmax))
+        assert goal_ymin > 0
+        assert goal_ymax < self.ysize
+        assert goal_xmin > 0
+        assert goal_xmax < self.xsize
         self.goal_maps = np.zeros((self.max_steps, self.ysize, self.xsize), np.uint8)
         self.road_maps = np.zeros((self.max_steps, self.ysize, self.xsize), np.uint8)
         goal_angle = self.rdn.choice(range(1, 359, 45))
@@ -340,11 +358,7 @@ class SimpleEnv():
                               ymarkersize=2, xmarkersize=2,
                               color=goal_pixel)
 
-    def reset(self, goal_distance=1000, experiment_name="None", condition_length=0, goal_speed=0.5):
-
-        if goal_speed != 0.5:
-            print("WARNING GOAL SPEED ISNT 0.5")
-            embed()
+    def reset(self, goal_distance=1000, experiment_name="None", condition_length=0, goal_speed=0.0):
         self.goal_speed = goal_speed
         self.experiment_name = experiment_name
         max_xobstaclesize = int(self.xsize*.15)
@@ -355,9 +369,9 @@ class SimpleEnv():
         # robot shape
         yrsize,xrsize=1,1
         self.safezone = yrsize*1
-        init_ys = [0, self.ysize-(1+yrsize)]
-        init_y = float(self.rdn.choice(init_ys))
+        init_y = float(self.rdn.randint(yrsize+5,self.ysize-(yrsize+5)))
         init_x = float(self.rdn.randint(xrsize+5,self.xsize-(xrsize+5)))
+
         self.robot_map = np.zeros((self.ysize, self.xsize), np.uint8)
         self.true_robot_map = np.zeros((self.ysize, self.xsize), np.uint8)
 
@@ -451,7 +465,7 @@ class SimpleEnv():
     def get_state_given_roadmap(self, road_map):
         #if road_map.max() != max_pixel:
         #    print("given map with no goal")
-        rstate = (self.robot.y/float(self.ysize), self.robot.x/float(self.xsize))
+        rstate = (self.robot.y/float(self.ysize), self.robot.x/float(self.xsize), self.robot.bearing)
         state = (rstate, road_map)
         return state
 
@@ -462,9 +476,10 @@ class SimpleEnv():
 
     def get_state(self, state_index):
         road_map = self.get_road_state(state_index)
-        if road_map.max() != max_pixel:
+        if (road_map == goal_pixel).sum() < 1:
             print("NO GOAL STEP ", state_index)
-        rstate = (self.robot.y/float(self.ysize), self.robot.x/float(self.xsize))
+            embed()
+        rstate = (self.robot.y/float(self.ysize), self.robot.x/float(self.xsize), self.robot.bearing)
         state = (rstate, road_map)
         return state
 
@@ -473,8 +488,11 @@ class SimpleEnv():
         robot_val = state[0]
         ry = float(robot_val[0]*self.ysize)
         rx = float(robot_val[1]*self.xsize)
+        rb = robot_val[2]
         #print("want to set robot to", ry,rx)
-        robot_alive = self.robot.set_state(ry,rx)
+        robot_alive = self.robot.set_state(ry,rx,rb)
+        if not robot_alive:
+            embed()
         finished, reward = self.check_state(state, robot_alive, state_index)
         return finished, reward
 
@@ -504,15 +522,13 @@ class SimpleEnv():
             # road_maps is max_steps long
             # robot is alive will say if the robot ran into a wall
             robot_is_alive = self.robot.step(self.timestep)
-            #print('##################################')
-            #print('## rstep alive:{} action: {} speed: {} angle {} ({},{}) step {}'.format(robot_is_alive,
-            #      action_index, self.robot.speed, self.robot.angle,
-            #      round(self.robot.y,2), round(self.robot.x,2), state_index))
-            #print('##################################')
+            if not robot_is_alive:
+                print('## MODEL STEP ################################')
+                print('## rstep alive:{} action: {} speed: {} angle {} bearing {} ({},{}) step {}'.format(robot_is_alive,
+                      action_index, self.robot.speed, self.robot.angle, self.robot.bearing,
+                      round(self.robot.y,2), round(self.robot.x,2), state_index))
+                print('##################################')
 
-            #next_state = self.get_state(next_state_index)
-            #assert(next_state[1].max() == max_pixel)
-            # reward for time step
             next_state_index = state_index + 1
             next_state = self.get_state_given_roadmap(next_road_map)
             finished, reward = self.check_state(next_state, robot_is_alive, next_state_index)
@@ -530,11 +546,11 @@ class SimpleEnv():
             # road_maps is max_steps long
             # robot is alive will say if the robot ran into a wall
             robot_is_alive = self.robot.step(self.timestep)
-            #print('##################################')
-            #print('## rstep alive:{} action: {} speed: {} angle {} ({},{}) step {}'.format(robot_is_alive,
-            #      action_index, self.robot.speed, self.robot.angle,
-            #      round(self.robot.y,2), round(self.robot.x,2), state_index))
-            #print('##################################')
+            print('##################################')
+            print('## rstep alive:{} action: {} speed: {} angle {} ({},{}) step {}'.format(robot_is_alive,
+                  action_index, self.robot.speed, self.robot.angle,
+                  round(self.robot.y,2), round(self.robot.x,2), state_index))
+            print('##################################')
 
             next_state_index = state_index + 1
             next_state = self.get_state(next_state_index)
@@ -559,7 +575,8 @@ class SimpleEnv():
             self.robot.alive = True
             ry = float(state[0][0]*self.ysize)
             rx = float(state[0][1]*self.xsize)
-            self.robot.set_state(ry,rx)
+            rb = state[1]
+            self.robot.set_state(ry,rx,rb)
             #show_state = state[1]+self.robot.local_map#+self.goal.local_map
             show_state = state[1]+self.robot.local_map+self.goal.local_map
         except Exception, e:
@@ -606,25 +623,24 @@ if __name__ == '__main__':
     rdn = np.random.RandomState(seed)
     level= 10
     env = SimpleEnv(random_state=rdn, ysize=ysize, xsize=xsize,  level=level, agent_max_speed= 0.5,)
-    print(env.max_steps)
-    #env = SimpleEnv(random_state=rdn, ysize=ysize, xsize=xsize, level=level, agent_max_speed= 1.0)
-    #print(env.max_steps)
-    #sys.exit()
+    ##env = SimpleEnv(random_state=rdn, ysize=ysize, xsize=xsize, level=level, agent_max_speed= 1.0)
+    ##print(env.max_steps)
+    ##sys.exit()
 
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    for e in range(num_episodes):
-        print(e/float(num_episodes))
-        env.reset()
-        #for t in range(env.road_maps.shape[0]):
-        for t in [0]:
-            name = os.path.join(save_path,'seed_%05d_episode_%05d_frame_%05d.png'%(seed, e, t))
-            p = env.get_state_plot(env.get_state(0))
-            plt.figure()
-            plt.imshow(p,origin='lower',interpolation='none',cmap=plt.cm.viridis)
-            plt.savefig(name)
+    #if not os.path.exists(save_path):
+    #    os.makedirs(save_path)
+    #for e in range(num_episodes):
+    #    print(e/float(num_episodes))
+    #    env.reset()
+    #    #for t in range(env.road_maps.shape[0]):
+    #    for t in [0]:
+    #        name = os.path.join(save_path,'seed_%05d_episode_%05d_frame_%05d.png'%(seed, e, t))
+    #        p = env.get_state_plot(env.get_state(0))
+    #        plt.figure()
+    #        plt.imshow(p,origin='lower',interpolation='none',cmap=plt.cm.viridis)
+    #        plt.savefig(name)
 
-            #imwrite(name,p)
+    #        #imwrite(name,p)
 
     embed()
 

@@ -16,7 +16,7 @@ import logging
 import os
 import sys
 import pickle
-
+import cProfile
 from vo_planner.worlds.simple_world import SimpleEnv, max_pixel, min_pixel
 
 
@@ -75,11 +75,14 @@ class PTreeNode(object):
         best = max(self.children_.iteritems(), key=lambda x: x[1].get_value(c_puct))
         return best
 
-def get_relative_bearing(gy, gx, ry, rx):
+def get_relative_bearing(gy, gx, ry, rx, rbearing):
     dy = gy-ry
     dx = gx-rx
-    return np.rad2deg(math.atan2(dy,dx))
-
+    # assumes I am at 90 degrees
+    relative_bearing = np.rad2deg(math.atan2(dy,dx))
+    my_diff_from_90 = (90-rbearing)%360
+    out_bearing = (relative_bearing+my_diff_from_90)%360
+    return out_bearing
 
 def goal_node_probs_fn(action_space, action_angles, goal_bearing):
     action_distances = np.abs(np.cos(np.deg2rad(action_angles-goal_bearing))-1)
@@ -97,11 +100,13 @@ def goal_node_probs_fn(action_space, action_angles, goal_bearing):
     best_angles+=args.smoothing/float(len(action_space))
     prob_sorted_actions_and_probs = list(zip(best_actions, best_angles))
     actions_and_probs = sorted(prob_sorted_actions_and_probs, key=lambda tup: tup[0])
+    #print("actions", actions_and_probs)
+    #embed()
     return actions_and_probs
 
-def equal_node_probs_fn(state, state_index, env, gm):
-    probs = np.ones(len(env.action_space))/float(len(env.action_space))
-    actions_and_probs = list(zip(env.action_space, probs))
+def equal_node_probs_fn(action_space, action_angles, goal_bearing):
+    probs = np.ones(len(action_space))/float(len(action_space))
+    actions_and_probs = list(zip(action_space, probs))
     return actions_and_probs
 
 def get_vqvae_pcnn_model(state_index, est_inds, true_states, cond_states):
@@ -329,7 +334,7 @@ class PMCTS(object):
                     ### reference - goal_node_probs_fn(action_space, action_angles, goal_bearing)
                     rstate,tobs = state
                     gstate = self.env.get_goal_state()
-                    gb = get_relative_bearing(gstate[0], gstate[1], rstate[0], rstate[1])
+                    gb = get_relative_bearing(gstate[0], gstate[1], rstate[0], rstate[1], rstate[2])
                     actions_and_probs = self.node_probs_fn(self.env.action_space, self.env.action_angles,  gb)
                     ### old actions_and_probs = self.node_probs_fn(state, state_index, self.env, gl)
                     node.expand(actions_and_probs)
@@ -352,6 +357,7 @@ class PMCTS(object):
                 # cant actually use next state because we dont know it
                 next_state_index = state_index + 1
                 vnext_road_map = self.road_map_ests[next_state_index]
+
                 next_vstate, reward, finished, _ = self.env.model_step(state, state_index, action, vnext_road_map)
                 logging.debug("GREEDY SELECT state_index:%s action:%s reward:%s finished %s" %(state_index,action,reward,finished))
                 cnt+=1
@@ -425,11 +431,12 @@ class PMCTS(object):
             bonus = 1
         if bonus < 1:
             bonus = -10
-        ry,rx = self.env.get_robot_state(state)
+        ry,rx,rb = self.env.get_robot_state(state)
         relative_state = self.get_relative_index(state_index)
         #print('robot playout', self.start_state_index, state_index, relative_state)
         try:
             self.playout_robots[relative_state,ry,rx] = self.env.robot.color
+            #print("added robot playout", state_index, ry, rx)
         except Exception, e:
             print(e, 'rob')
             embed()
@@ -481,7 +488,7 @@ class PMCTS(object):
         true_road_map = self.env.road_maps[state_index]
         pred_road_map = self.road_map_ests[state_index]
 
-        ry,rx = self.env.get_robot_state(state)
+        ry,rx,rb = self.env.get_robot_state(state)
         ys = self.env.ysize-1
         xs = self.env.xsize-1
         bs = 5
@@ -633,16 +640,16 @@ def plot_playout_scatters(true_env, base_path,  fname,
         state_index = step_frame['state_index']
         print("plotting true frame {}/{} state_index {}/{}".format(ts,total_steps,state_index, last_state_index))
         # true frame
-        ry,rx = step_frame['robot_yx']
+        ry,rx,rb = step_frame['robot_yxb']
         ry = ry/float(true_env.ysize)
         rx = rx/float(true_env.xsize)
 
         true_state = true_env.road_maps[state_index]
-        state = ((ry,rx), true_state)
+        state = ((ry,rx,rb), true_state)
         true_frame = true_env.get_state_plot(state)
 
         model_state = decision_time_road_map_ests[state_index]
-        vstate = ((ry,rx), model_state)
+        vstate = ((ry,rx,rb), model_state)
         model_frame = true_env.get_state_plot(vstate)
 
         _, model_error = get_false_neg_counts(deepcopy(true_env.road_maps[state_index]), deepcopy(model_road_maps[state_index]))
@@ -692,7 +699,7 @@ def plot_playout_scatters(true_env, base_path,  fname,
 
     print("making gif")
     sh_path = os.path.join(fpath, 'run_seed_{}.sh'.format(seed))
-    gif_path = os.path.join(fpath,'seed_{}.gif'.format(seed))
+    gif_path = os.path.join(fpath,'0_seed_{}.gif'.format(seed))
     search = os.path.join(fpath, 'seed_*.png')
     cmd = 'convert -delay 1/100000 %s %s \n'%( os.path.join(fpath, '*.png'), gif_path)
     sof = open(sh_path, 'w')
@@ -701,7 +708,7 @@ def plot_playout_scatters(true_env, base_path,  fname,
     os.system('sh %s'%sh_path)
     print("FINISHED WRITING TO", os.path.split(sh_path)[0])
 
-    fast_gif_path = os.path.join(fast_path, 'fast_seed_{}.gif'.format(seed))
+    fast_gif_path = os.path.join(fast_path, '0_fast_seed_{}.gif'.format(seed))
     fast_sh_path = os.path.join(fast_path, 'run_fast_seed_{}.sh'.format(seed))
     cmd = 'convert -delay 1/30 %s %s\n'%(os.path.join(fast_path, '*.png'), fast_gif_path)
     of = open(fast_sh_path, 'w')
@@ -749,30 +756,24 @@ def run_trace(fname, seed=3432, ysize=48, xsize=48, level=6,
     value = 0
     while not finished:
         states.append(state)
-        #try:
-        #    assert(state[1].max() == max_pixel)
-        #except:
-        #    print("TRACE", t)
-        #    embed()
         # search for best action
         st = time.time()
-        #action, action_probs, this_playout_frames, this_playout_states, state_ests, state_est_indexes = pmcts.get_best_action(deepcopy(state), t)
+
+
         action, action_probs = pmcts.get_best_action(deepcopy(state), t)
-        #JRH
-        #frames.append((true_env.get_state_plot(state), this_playout_frames))
         et = time.time()
 
-        ry,rx = true_env.get_robot_state(state)
+        ry,rx,rb = true_env.get_robot_state(state)
         next_state, reward, finished, _ = true_env.step(state, t, action)
+        nextry, nextrx, nextb = true_env.get_robot_state(next_state)
+        print("TOOK ACTION", action, true_env.actions[action])
+        print(ry,rx,nextry,nextrx,nextb)
+        #embed()
 
-        playout_frames.append({'state_index':t, 'robot_yx':(ry,rx),
+        playout_frames.append({'state_index':t, 'robot_yxb':(ry,rx,rb),
                                'playout_robot_states':deepcopy(pmcts.playout_robots),
                                'playout_model_states':deepcopy(pmcts.playout_road_maps),
                                })
-
-
-
-        print("CHOSE ACTION", action)
 
         print("decision took %s seconds"%round(et-st, 2))
         results['decision_sts'].append(st)
@@ -831,16 +832,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--seed', type=int, default=35, help='random seed to start with (will be incremented each episode)')
     parser.add_argument('-e', '--num_episodes', type=int, default=100, help='num episodes to run')
-    parser.add_argument('-y', '--ysize', type=int, default=150, help='pixel size of game in y direction')
-    parser.add_argument('-x', '--xsize', type=int, default=100, help='pixel size of game in x direction')
+    parser.add_argument('-y', '--ysize', type=int, default=30, help='pixel size of game in y direction')
+    parser.add_argument('-x', '--xsize', type=int, default=50, help='pixel size of game in x direction')
     parser.add_argument('-g', '--max_goal_distance', type=int, default=1000, help='limit goal distance to within this many pixels of the agent')
-    parser.add_argument('-l', '--level', type=int, default=6, help='game playout level. level 0--> no obstacles, level 10-->nearly all obstacles')
-    parser.add_argument('-p', '--num_playouts', type=int, default=200, help='number of playouts for each step')
-    parser.add_argument('-r', '--rollout_steps', type=int, default=10, help='how far in the future to generate model and lookahead for planning')
+    parser.add_argument('-l', '--level', type=int, default=0, help='game playout level. level 0--> no obstacles, level 10-->nearly all obstacles')
+    parser.add_argument('-p', '--num_playouts', type=int, default=500, help='number of playouts for each step')
+    parser.add_argument('-r', '--rollout_steps', type=int, default=30, help='how far in the future to generate model and lookahead for planning')
     parser.add_argument('-c', '--cuda', action='store_true', default=True, help='use gpu for forward model')
     parser.add_argument('-d', '--debug', action='store_true', default=False, help='print debug info')
     parser.add_argument('-sams', '--num_samples', type=int , default=5, help='number of samples to take from each vqvae_pcnn_model prediction')
-    parser.add_argument('-gs', '--goal_speed', type=float , default=0.5, help='true speed of the goal in pixels/timestep. this should match the speed at which the model wash trained.')
+    parser.add_argument('-gs', '--goal_speed', type=float , default=0.0, help='true speed of the goal in pixels/timestep. this should match the speed at which the model wash trained.')
     parser.add_argument('-as', '--agent_max_speed', type=float , default=1.0, help='speed of the agent relative to the goal. 1.0 means the agent is the same speed as the goal. 0.5 means the agent is half of the speed of the goal')
     parser.add_argument('--save_pkl', action='store_false', default=True)
     parser.add_argument('--render', action='store_true', default=False, help='display matplotlib plot as the agent is playing')
@@ -848,15 +849,10 @@ if __name__ == "__main__":
     parser.add_argument('-sm', '--smoothing', type=float , default=0.5, help='goal has more influence when smoothing is near 0.0')
     parser.add_argument('--plot_playouts', action='store_true', default=False, help='save plots for the individual forward planning steps for each timestep')
     parser.add_argument('--save_plots', action='store_true', default=False, help='save plots for agent steps at each time step')
-    parser.add_argument('-gap', '--plot_playout_gap', type=int, default=3, help='gap between plot playouts for each step (this reduces overhead of visualizing playouts)')
-    parser.add_argument('-f', '--prior_fn', type=str, default='goal', help='bias the rollouts towards a prior. options are "goal" or "equal"')
+    parser.add_argument('-gap', '--plot_playout_gap', type=int, default=1, help='gap between plot playouts for each step (this reduces overhead of visualizing playouts)')
+    parser.add_argument('-f', '--prior_fn', type=str, default='equal', help='equal or goal - bias the rollouts towards a prior. options are "goal" or "equal"')
 
     args = parser.parse_args()
-    #equal_node_probs_fn(
-    if args.prior_fn == 'goal':
-        prior = goal_node_probs_fn
-    else:
-        prior = equal_node_probs_fn
     use_cuda = args.cuda
     seed = args.seed
     dsize = 40
@@ -875,7 +871,7 @@ if __name__ == "__main__":
 
     N_LAYERS = 15 # layers in pixelcnn
     DIM = 256
-    history_size = 4
+    history_size = 0
     cond_size = history_size*DIM
 
     goal_dis = args.max_goal_distance
@@ -884,6 +880,10 @@ if __name__ == "__main__":
     else:
         logging.basicConfig(level=logging.INFO)
 
+    if args.prior_fn == 'goal':
+        prior = goal_node_probs_fn
+    else:
+        prior = equal_node_probs_fn
     fname = 'sample_%s_stepwin_prior_%s_rollouts_%s_length_%s_level_%s_as_%01.02f_gs_%01.02f_gd_%03d.pkl' %(
                                     args.num_samples,
                                     args.prior_fn,
@@ -940,8 +940,9 @@ if __name__ == "__main__":
             pickle.dump(all_results,ffile)
             print("saved seed %s"%seed)
             ffile.close()
+        embed()
         seed +=1
-    embed()
+    #embed()
     print("FINISHED")
 
 
