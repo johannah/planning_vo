@@ -144,7 +144,7 @@ if __name__ == '__main__':
     savedir = 'models'
     img_savedir = 'predictions'
     cnt = 0
-    model_load_path = 'models/model_000000001000155.pkl'
+    model_load_path = 'models/model_000000001319931.pkl'
     if not os.path.exists(savedir):
         os.makedirs(savedir)
 
