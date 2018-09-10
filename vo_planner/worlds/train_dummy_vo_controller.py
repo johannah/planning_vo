@@ -19,7 +19,7 @@ import torch # package for building functions with learnable parameters
 import torch.nn as nn # prebuilt functions specific to neural networks
 from torch.autograd import Variable # storing data while learning
 from vo_lstm import LSTM
-from utils import load_data, save_checkpoint, predict, teacher_force_predict, plot_traces
+from utils import load_dummy_vo_data, save_checkpoint, predict, teacher_force_predict, plot_traces
 rdn = np.random.RandomState(33)
 # TODO one-hot the action space?
 
@@ -45,6 +45,8 @@ def train(x, y, e, do_save=False):
         outputs+=[output]
     y_pred = torch.stack(outputs, 0)
     mse_loss = ((y_pred-y.to(DEVICE))**2).mean()
+    # JRH  added without testing
+    lstm.zero_grad()
     mse_loss.backward()
     losses.append(mse_loss.data)
     clip = 10
@@ -137,6 +139,7 @@ def plot_results(cnt, vx_tensor, vy_tensor, name='test'):
         filename = os.path.join(img_savedir, '%s_%s_%05d.png'%(model_save_name.replace('.pkl',''),name,e))
         plot_traces(trues[:,e], tf_predicts[:,e], predicts[:,e], filename)
 
+
 if __name__ == '__main__':
     import argparse
     hidden_size = 1024
@@ -144,7 +147,7 @@ if __name__ == '__main__':
     savedir = 'models'
     img_savedir = 'predictions'
     cnt = 0
-    model_load_path = 'models/model_000000001319931.pkl'
+    model_load_path = 'models/model_000000003700572.pkl'
     if not os.path.exists(savedir):
         os.makedirs(savedir)
 
@@ -169,8 +172,8 @@ if __name__ == '__main__':
 
     save_every = args.save_every
     # load train and test set
-    x_tensor, y_tensor = load_data("train_2d_controller.npz")
-    valid_x_tensor, valid_y_tensor = load_data("test_2d_controller.npz")
+    x_tensor, y_tensor = load_dummy_vo_data("train_2d_controller.npz")
+    valid_x_tensor, valid_y_tensor = load_dummy_vo_data("test_2d_controller.npz")
     input_size = x_tensor.shape[2]
     output_size = y_tensor.shape[2]
     lstm = LSTM(input_size=input_size, output_size=output_size, hidden_size=hidden_size).to(DEVICE)
