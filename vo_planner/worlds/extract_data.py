@@ -4,7 +4,7 @@ from IPython import embed
 
 rdn = np.random.RandomState(12)
 
-data_file = 'human_road.npz'
+data_file = '../data/human_road.npz'
 npruns = np.load(data_file)
 
 chunks_per_episode = 500
@@ -13,8 +13,8 @@ max_chunk_length = 201
 all_states = np.array(npruns['states'])
 all_actions = np.array(npruns['actions'])
 all_tracks = npruns['roads']
-num_subgoals_per_trace = 10
-# name of states [img,speed,pos0,pos1,angle,steer,gas,brake] 
+num_subgoals_per_trace = 5
+# name of states [img,speed,pos0,pos1,angle,steer,gas,brake]
 # action array (steering, gas)
 
 def get_sequences(inds, tracks, astates, aactions):
@@ -37,11 +37,12 @@ def get_sequences(inds, tracks, astates, aactions):
             details.append([ind, st, en, en-st])
             diff_y = np.insert(np.diff(states[st:en,1]), 0, 0.0)
             diff_x = np.insert(np.diff(states[st:en,2]), 0, 0.0)
-            subgoals = sorted(list(rdn.choice(np.arange(st+2, en-5, 5), num_subgoals_per_trace-1, replace=False)))
-            subgoals.append(en-1)
+            abs_subgoals = sorted(list(rdn.choice(np.arange(st+10, en-10, 10), num_subgoals_per_trace, replace=False)))
+            suy = states[abs_subgoals,1]-states[st,1]
+            sux = states[abs_subgoals,0]-states[st,0]
+            subgoals = np.array([suy,sux]).T
             all_subgoals.append(subgoals)
-
-            # name of states [pos0,pos1,speed,angle,steer,gas,brake,diffy,diffx,steering,throttle] 
+            # name of states [pos0,pos1,speed,angle,steer,gas,brake,diffy,diffx,steering,throttle]
             state_seqs[cnt,:en-st,:] = np.hstack((states[st:en,1:], states[st:en,0][:,None], diff_y[:,None], diff_x[:,None], actions[st:en]))
             cnt+=1
 
@@ -50,13 +51,13 @@ def get_sequences(inds, tracks, astates, aactions):
 
 all_inds = np.arange(all_states.shape[0])
 num_train = int(all_inds.shape[0]*.85)
-train_inds = rdn.choice(all_inds, num_train, replace=False)  
+train_inds = rdn.choice(all_inds, num_train, replace=False)
 test_inds = [a for a in all_inds if a not in train_inds]
 
 test_sequences = get_sequences(test_inds, all_tracks[test_inds], all_states[test_inds], all_actions[test_inds])
 train_sequences = get_sequences(train_inds, all_tracks[train_inds], all_states[train_inds], all_actions[train_inds])
-np.savez("train_2d_controller", states=train_sequences[0], details=train_sequences[1], subgoals=train_sequences[2])
-np.savez("test_2d_controller", states=test_sequences[0], details=test_sequences[1], subgoals=test_sequences[2])
+np.savez("../data/train_2d_controller", states=train_sequences[0], details=train_sequences[1], subgoals=train_sequences[2])
+np.savez("../data/test_2d_controller", states=test_sequences[0], details=test_sequences[1], subgoals=test_sequences[2])
 
 embed()
 
