@@ -68,7 +68,7 @@ def predict(x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, use_center=True):
         preds.append(pred)
     return np.array(preds), h1_tm1, c1_tm1, h2_tm1, c2_tm1
 
-def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=False, bn=0, batch_size=1):
+def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=False, bn=0, batch_size=1, lead_in=2):
     h1_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
     c1_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
     h2_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
@@ -85,10 +85,10 @@ def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=Fal
     strokes = np.zeros((num,batch_size,output_size), dtype=np.float32)
     for i in range(num-1):
         pred, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = predict(last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, use_center=use_center)
-        if i < lead_in:
-            strokes[i] = y[i].cpu().data.numpy()
-        else:
-            strokes[i] = pred
+        #if i < lead_in:
+        #    strokes[i] = y[i].cpu().data.numpy()
+        #else:
+        strokes[i] = pred
         last_x = x[i+1,:]
         if not teacher_force_predict and i>lead_in:
             last_x[:,-2:] = torch.FloatTensor(pred)
@@ -96,20 +96,19 @@ def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=Fal
     ytrue = y.cpu().data.numpy()
     return strokes, ytrue
 
-def get_plot_name(modelname, bn, use_center, teacher_force, batch_size):
+def get_plot_name(modelname, bn, use_center, teacher_force, batch_size, lead_in):
     base = '_gen_bn%02d_bs%02d'%(bn,batch_size)
     if use_center:
-        base = base+'_center'
-
+        base += '_center'
     if teacher_force:
-        fname = os.path.join(modelname.replace('.pkl', base+'_tf.png'))
+        base+='_tf'
     else:
-        fname = os.path.join(modelname.replace('.pkl', base+'.png'))
+        base+='_li%03d'%lead_in
+    fname = os.path.join(modelname.replace('.pkl', base+'.png'))
     return fname
 
 if __name__ == '__main__':
     import argparse
-    lead_in = 4
     data_batch_size = 32
     seq_length = 200
     hidden_size = 1024
@@ -130,6 +129,7 @@ if __name__ == '__main__':
     parser.add_argument('-bn', '--batch_num',type=int, default=0, help='index into batch from teacher force to use')
     parser.add_argument('--whole_batch', action='store_true', default=False, help='plot an entire batch')
     parser.add_argument('--num_plot', default=10, type=int, help='number of examples from training and test to plot')
+    parser.add_argument('-l', '--lead_in', default=5, type=int, help='number of examples to teacher force before running')
 
     args = parser.parse_args()
 
@@ -167,13 +167,13 @@ if __name__ == '__main__':
         args.batch_num = 0
 
     if not args.whole_batch:
-        strokes, ytrue = generate(x,y,num=args.num,teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=args.batch_num, batch_size=args.batch_size)
-        fname = get_plot_name(args.model_loadname, args.batch_num,args.use_center,args.teacher_force,args.batch_size)
+        strokes, ytrue = generate(x,y,num=args.num,teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=args.batch_num, batch_size=args.batch_size, lead_in=args.lead_in)
+        fname = get_plot_name(args.model_loadname, args.batch_num,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
         plot_strokes(strokes, ytrue, name=fname, pen=False)
     else:
         for bn in range(data_loader.batch_size):
-            strokes, ytrue = generate(x,y,num=args.num, teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=bn, batch_size=args.batch_size)
-            fname = get_plot_name(args.model_loadname,bn,args.use_center,args.teacher_force,args.batch_size)
+            strokes, ytrue = generate(x,y,num=args.num, teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=bn, batch_size=args.batch_size, lead_in=args.lead_in)
+            fname = get_plot_name(args.model_loadname,bn,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
             plot_strokes(strokes, ytrue, name=fname, pen=False)
 
 

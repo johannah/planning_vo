@@ -63,7 +63,7 @@ def plot_strokes(strokes_x_in, strokes_y_in, name='example.png',pen=True):
         for i in range(strokes_x.shape[1]):
             strokes_xi = np.cumsum(deepcopy(strokes_x[:,i]), axis=0)
             if not i:
-                ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c='b', label='pred', linewidth=.5, alpha=0.5)
+                ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c='b', label='%s pred'%strokes_x.shape[1], linewidth=.5, alpha=0.5)
             else:
                 ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c='b', linewidth=.5, alpha=.5)
             ax1.scatter(strokes_xi[:,0], -strokes_xi[:,1], c='b', s=.2, alpha=.5)
