@@ -96,8 +96,10 @@ def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=Fal
     ytrue = y.cpu().data.numpy()
     return strokes, ytrue
 
-def get_plot_name(modelname, bn, use_center, teacher_force, batch_size, lead_in):
+def get_plot_name(modelname, training, bn, use_center, teacher_force, batch_size, lead_in):
     base = '_gen_bn%02d_bs%02d'%(bn,batch_size)
+    if training:
+        base+='_train'
     if use_center:
         base += '_center'
     if teacher_force:
@@ -141,9 +143,12 @@ if __name__ == '__main__':
                                  test_load_path='../data/train_2d_controller.npz',
                                  batch_size=data_batch_size)
     if args.training:
+        print("using training data")
         xnp,ynp = data_loader.next_batch()
     else:
+        print("using validation data")
         xnp,ynp = data_loader.validation_data()
+
     output_size = ynp.shape[2]
     input_size = xnp.shape[2]
     x = Variable(torch.FloatTensor(xnp))
@@ -166,14 +171,17 @@ if __name__ == '__main__':
     if args.batch_num > data_loader.batch_size:
         args.batch_num = 0
 
+    if args.teacher_force:
+        args.lead_in = 0
+
     if not args.whole_batch:
         strokes, ytrue = generate(x,y,num=args.num,teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=args.batch_num, batch_size=args.batch_size, lead_in=args.lead_in)
-        fname = get_plot_name(args.model_loadname, args.batch_num,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
-        plot_strokes(strokes, ytrue, name=fname, pen=False)
+        fname = get_plot_name(args.model_loadname, args.training, args.batch_num,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
+        plot_strokes(strokes, ytrue, lead_in=args.lead_in, name=fname, pen=False)
     else:
         for bn in range(data_loader.batch_size):
             strokes, ytrue = generate(x,y,num=args.num, teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=bn, batch_size=args.batch_size, lead_in=args.lead_in)
-            fname = get_plot_name(args.model_loadname,bn,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
-            plot_strokes(strokes, ytrue, name=fname, pen=False)
+            fname = get_plot_name(args.model_loadname, args.training, bn,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
+            plot_strokes(strokes, ytrue, lead_in=args.lead_in, name=fname, pen=False)
 
 

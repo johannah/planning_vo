@@ -42,7 +42,7 @@ def get_dummy_data(v_x, v_y):
         v_y[:,i] = v_y[:,0]
     return v_x, v_y
 
-def plot_strokes(strokes_x_in, strokes_y_in, name='example.png',pen=True):
+def plot_strokes(strokes_x_in, strokes_y_in, lead_in=0, name='example.png',pen=True):
     strokes_x = deepcopy(strokes_x_in)
     f, ax1 = plt.subplots(1,1, figsize=(6,3))
 
@@ -72,6 +72,8 @@ def plot_strokes(strokes_x_in, strokes_y_in, name='example.png',pen=True):
             strokes_y = np.cumsum(strokes_y, axis=0)
             ax1.scatter(strokes_y[:,0,0], -strokes_y[:,0,1], c='g', s=.9)
             ax1.plot(strokes_y[:,0,0], -strokes_y[:,0,1], c='g', label='gt', linewidth=2, alpha=.9)
+        if lead_in:
+            ax1.scatter([strokes_y[lead_in,0,0]], [-strokes_y[lead_in,0,1]], c='r', marker='o', s=5, label='lead in')
 
     plt.legend()
     print('plotting %s'%name)
