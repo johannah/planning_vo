@@ -64,9 +64,15 @@ def train(x, y, validation=False):
     rloss = loss.cpu().data.numpy()
     return y_pred, rloss
 
+def rolling_average(a, n=10) :
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
+
 def loop(data_loader, num_epochs=1000, save_every=1000, train_losses=[], test_losses=[], train_cnts=[], test_cnts=[], dummy=False):
     print("starting training loop for data with %s batches"%data_loader.num_batches)
     st = time.time()
+
     if len(train_losses):
         # resume cnt from last save
         last_save = train_cnts[-1]
@@ -105,7 +111,11 @@ def loop(data_loader, num_epochs=1000, save_every=1000, train_losses=[], test_lo
                         'optimizer':optim.state_dict(),
                          }
                 basename = os.path.join(savedir, '%s_%015d'%(model_save_name,cnt))
-                plot_losses(train_cnts, train_losses, test_cnts, test_losses, name=basename+'_loss.png')
+                n = 500
+                plot_losses(rolling_average(train_cnts, n),
+                            rolling_average(train_losses, n),
+                            rolling_average(test_cnts, n),
+                            rolling_average(test_losses, n), name=basename+'_loss.png')
                 save_checkpoint(state, filename=basename+'.pkl')
 
             cnt+= x.shape[1]
@@ -129,12 +139,12 @@ if __name__ == '__main__':
         os.makedirs(savedir)
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--cuda', action='store_true', default=False)
-    parser.add_argument('--dummy', action='store_true', default=False)
-    parser.add_argument('-po', '--plot', action='store_true', default=False)
-    parser.add_argument('-m', '--model_loadname', default=default_model_loadname)
+    parser.add_argument('--dummy',action='store_true', default=False)
+    parser.add_argument('-po', '--plot',action='store_true', default=False)
+    parser.add_argument('-m', '--model_loadname',default=default_model_loadname)
     parser.add_argument('-ne', '--num_epochs',default=300, help='num epochs to train')
-    parser.add_argument('-lr', '--learning_rate', default=1e-4, type=float, help='learning_rate')
-    parser.add_argument('-se', '--save_every',default=20000, help='how often in epochs to save training model')
+    parser.add_argument('-lr', '--learning_rate',default=1e-4,type=float, help='learning_rate')
+    parser.add_argument('-se', '--save_every',default=20000,type=int,help='how often in epochs to save training model')
     parser.add_argument('--limit', default=-1, type=int, help='limit training data to reduce convergence time')
     parser.add_argument('-l', '--load', action='store_true', default=False, help='load model to continue training or to generate. model path is specified with -m')
     parser.add_argument('-v', '--validate', action='store_true', default=False, help='test results')
@@ -176,7 +186,9 @@ if __name__ == '__main__':
             test_cnts = lstm_dict['test_cnts']
             test_losses = lstm_dict['test_losses']
 
-    loop(data_loader, save_every=save_every, num_epochs=args.num_epochs, train_losses=[], test_losses=[], train_cnts=[], test_cnts=[], dummy=args.dummy)
+    loop(data_loader, save_every=save_every, num_epochs=args.num_epochs,
+         train_losses=train_losses, test_losses=test_losses,
+         train_cnts=train_cnts, test_cnts=test_cnts, dummy=args.dummy)
 
     embed()
 

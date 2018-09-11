@@ -37,10 +37,11 @@ def get_sequences(inds, tracks, astates, aactions):
             details.append([ind, st, en, en-st])
             diff_y = np.insert(np.diff(states[st:en,1]), 0, 0.0)
             diff_x = np.insert(np.diff(states[st:en,2]), 0, 0.0)
-            abs_subgoals = sorted(list(rdn.choice(np.arange(st+10, en-10, 10), num_subgoals_per_trace, replace=False)))
+            abs_subgoals = sorted(list(rdn.choice(np.arange(st+10, en-10, 10), num_subgoals_per_trace-1, replace=False)))
+            abs_subgoals.append(en)
             suy = states[abs_subgoals,1]-states[st,1]
             sux = states[abs_subgoals,0]-states[st,0]
-            subgoals = np.array([suy,sux]).T
+            subgoals = np.array([abs_subgoals,suy,sux]).T
             all_subgoals.append(subgoals)
             # name of states [pos0,pos1,speed,angle,steer,gas,brake,diffy,diffx,steering,throttle]
             state_seqs[cnt,:en-st,:] = np.hstack((states[st:en,1:], states[st:en,0][:,None], diff_y[:,None], diff_x[:,None], actions[st:en]))

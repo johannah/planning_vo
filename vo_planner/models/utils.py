@@ -111,13 +111,13 @@ def load_data(load_path):
     x = np.array(states[:-1,:,[2,3,4,9,10,7,8]], dtype=np.float32)
     # one time step ahead to predict diffs
     y = np.array(states[1:,:,[7,8]], dtype=np.float32)
-    return x, y
+    return x, y, subgoals
 
 class DataLoader():
     def __init__(self, train_load_path, test_load_path, batch_size=32, random_number=394):
         self.rdn = np.random.RandomState(random_number)
         self.batch_size = batch_size
-        self.x, self.y = load_data(train_load_path)
+        self.x, self.y, _ = load_data(train_load_path)
         self.num_batches = self.x.shape[1]//self.batch_size
         self.batch_array = np.arange(self.x.shape[1])
         self.valid_x, self.valid_y = load_data(test_load_path)

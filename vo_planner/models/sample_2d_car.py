@@ -47,11 +47,11 @@ def get_pi_idx(x, pdf):
     print("error sampling")
     return -1
 
-def predict(x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, use_center=True):
+def predict(tlstm, x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, trdn, use_center=True):
     # one batch of x
-    output, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = lstm(x, h1_tm1, c1_tm1, h2_tm1, c2_tm1)
+    output, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = tlstm(x, h1_tm1, c1_tm1, h2_tm1, c2_tm1)
     # out_pi, out_mu1, out_mu2, out_sigma1, out_sigma2, out_corr
-    out_pi, out_mu1, out_mu2, out_sigma1, out_sigma2, out_corr = lstm.get_mixture_coef(output)
+    out_pi, out_mu1, out_mu2, out_sigma1, out_sigma2, out_corr = tlstm.get_mixture_coef(output)
     mso = (out_pi.cpu().data.numpy(),
            out_mu1.cpu().data.numpy(), out_mu2.cpu().data.numpy(),
            out_sigma1.cpu().data.numpy(), out_sigma2.cpu().data.numpy(),
@@ -60,7 +60,7 @@ def predict(x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, use_center=True):
     # choose mixture
     preds = []
     for bn in range(h1_tm1.shape[0]):
-        idx = rdn.choice(np.arange(pi.shape[1]), p=pi[bn])
+        idx = trdn.choice(np.arange(pi.shape[1]), p=pi[bn])
         if use_center:
             pred = np.array([mu1[bn,idx], mu2[bn,idx]])
         else:
@@ -84,7 +84,7 @@ def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=Fal
     last_x = x[0,:]
     strokes = np.zeros((num,batch_size,output_size), dtype=np.float32)
     for i in range(num-1):
-        pred, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = predict(last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, use_center=use_center)
+        pred, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = predict(lstm, last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, trdn=rdn, use_center=use_center)
         #if i < lead_in:
         #    strokes[i] = y[i].cpu().data.numpy()
         #else:
