@@ -17,7 +17,6 @@ rdn = np.random.RandomState(33)
 
 torch.manual_seed(139)
 
-
 def plot_losses(train_cnts, train_losses, test_cnts, test_losses, name='loss_example.png'):
     plt.figure(figsize=(3,3))
     plt.plot(train_cnts, train_losses, label='train loss', lw=3)
@@ -51,26 +50,31 @@ def plot_strokes(strokes_x_in, strokes_y_in, name='example.png',pen=True):
         strokes_x[:, :2] = np.cumsum(strokes_x[:, :2], axis=0)
         ax1.scatter(strokes_x[:,0], -strokes_x[:,1], c='b', s=2, label='pred')
         for stroke in split_strokes(strokes_x):
-            ax1.plot(stroke[:,0], -stroke[:,1], c='b')
+            ax1.plot(stroke[:,0], -stroke[:,1], c='b', linewidth=1)
 
         if np.abs(strokes_y_in).sum()>0:
             strokes_y = deepcopy(strokes_y_in)
             strokes_y[:, :2] = np.cumsum(strokes_y[:, :2], axis=0)
             ax1.scatter(strokes_y[:,0], -strokes_y[:,1], c='g', s=2, label='gt')
             for stroke in split_strokes(strokes_y):
-                ax1.plot(stroke[:,0], -stroke[:,1], c='g')
+                ax1.plot(stroke[:,0], -stroke[:,1], c='g', linewidth=1)
     else:
         # no pen indicator
-        strokes_x = np.cumsum(strokes_x, axis=0)
-        ax1.plot(strokes_x[:,0], -strokes_x[:,1], c='b', label='pred')
-        ax1.scatter(strokes_x[:,0], -strokes_x[:,1], c='b', s=2)
+        for i in range(strokes_x.shape[1]):
+            strokes_xi = np.cumsum(deepcopy(strokes_x[:,i]), axis=0)
+            if not i:
+                ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c='b', label='pred', linewidth=.5, alpha=0.5)
+            else:
+                ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c='b', linewidth=.5, alpha=.5)
+            ax1.scatter(strokes_xi[:,0], -strokes_xi[:,1], c='b', s=.2, alpha=.5)
         if np.abs(strokes_y_in).sum()>0:
             strokes_y = deepcopy(strokes_y_in)
             strokes_y = np.cumsum(strokes_y, axis=0)
-            ax1.plot(strokes_y[:,0], -strokes_y[:,1], c='g', label='gt')
-            ax1.scatter(strokes_y[:,0], -strokes_y[:,1], c='g', s=2)
+            ax1.scatter(strokes_y[:,0,0], -strokes_y[:,0,1], c='g', s=.9)
+            ax1.plot(strokes_y[:,0,0], -strokes_y[:,0,1], c='g', label='gt', linewidth=2, alpha=.9)
 
     plt.legend()
+    print('plotting %s'%name)
     plt.savefig(name)
     plt.close()
 
