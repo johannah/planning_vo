@@ -13,7 +13,7 @@ max_chunk_length = 201
 all_states = np.array(npruns['states'])
 all_actions = np.array(npruns['actions'])
 all_tracks = npruns['roads']
-num_subgoals_per_trace = 5
+num_subgoals_per_trace = 25
 # name of states [img,speed,pos0,pos1,angle,steer,gas,brake]
 # action array (steering, gas)
 
@@ -33,18 +33,23 @@ def get_sequences(inds, tracks, astates, aactions):
         #end_plus = rdn.randint(min_chunk_length, max_chunk_length, chunks_per_episode)
         ends = starts+max_chunk_length
         #ends = np.clip(starts+end_plus, 0, last)
+        md = 5
+        pos_array = np.arange(md,max_chunk_length-md,md)
         for st,en in zip(starts, ends):
             details.append([ind, st, en, en-st])
-            diff_y = np.insert(np.diff(states[st:en,1]), 0, 0.0)
-            diff_x = np.insert(np.diff(states[st:en,2]), 0, 0.0)
-            abs_subgoals = sorted(list(rdn.choice(np.arange(st+10, en-10, 10), num_subgoals_per_trace-1, replace=False)))
-            abs_subgoals.append(en)
-            suy = states[abs_subgoals,1]-states[st,1]
-            sux = states[abs_subgoals,0]-states[st,0]
-            subgoals = np.array([abs_subgoals,suy,sux]).T
+            pos0 = states[st:en,1:2]-states[st][1]
+            pos1 = states[st:en,2:3]-states[st][2]
+            diff0 = np.insert(np.diff(pos0,axis=0), 0, 0.0)[:,None]
+            diff1 = np.insert(np.diff(pos1,axis=0), 0, 0.0)[:,None]
+            abs_subgoals = sorted(list(rdn.choice(pos_array, num_subgoals_per_trace-1, replace=False)))
+            abs_subgoals.append(pos0.shape[0]-1)
+            su0 = pos0[abs_subgoals]
+            su1 = pos1[abs_subgoals]
+            subgoals = np.array([abs_subgoals,su1[:,0],su0[:,0]]).T
             all_subgoals.append(subgoals)
             # name of states [pos0,pos1,speed,angle,steer,gas,brake,diffy,diffx,steering,throttle]
-            state_seqs[cnt,:en-st,:] = np.hstack((states[st:en,1:], states[st:en,0][:,None], diff_y[:,None], diff_x[:,None], actions[st:en]))
+            data = states[st:en,[3,4,5,6,0]]
+            state_seqs[cnt,:en-st,:] = np.hstack((pos0, pos1, data, diff0, diff1, actions[st:en]))
             cnt+=1
 
     print("finished with cnt", cnt, state_seqs.shape, len(details))
