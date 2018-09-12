@@ -85,8 +85,7 @@ def save_checkpoint(state, filename='model.pkl'):
     torch.save(state, filename)
     print("finishing save of {}".format(filename))
 
-
-def load_data(load_path):
+def load_data(load_path, cut=False):
     data = np.load(load_path)
     # name of features [pos0,pos1,speed,angle,steer,gas,brake,diffy,diffx,steering,throttle]
     # shape is [trace number, sequence, features]
@@ -108,10 +107,15 @@ def load_data(load_path):
     #y_tensor = torch.from_numpy(np.float32(states[1:,:,[2,7,8]]))
     #x_variable = Variable(x_tensor, requires_grad=True)
     #y_variable = Variable(y_tensor, requires_grad=False)
-    x = np.array(states[:-1,:,[2,3,4,9,10,7,8]], dtype=np.float32)
+    # dont cut off for the rl case in which we need the last state
+    if cut:
+        x = np.array(states[:,:,[2,3,4,9,10,7,8]], dtype=np.float32)
+    else:
+        x = np.array(states[:-1,:,[2,3,4,9,10,7,8]], dtype=np.float32)
     # one time step ahead to predict diffs
     y = np.array(states[1:,:,[7,8]], dtype=np.float32)
     return x, y, subgoals
+
 
 class DataLoader():
     def __init__(self, train_load_path, test_load_path, batch_size=32, random_number=394):

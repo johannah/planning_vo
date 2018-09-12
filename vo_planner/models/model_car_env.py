@@ -41,11 +41,14 @@ class ModelCarEnv():
         self.x_steering_index = 3
         # index in x feature space containing last action throttle
         self.x_throttle_index = 4
+        self.y_diff0_index = 0
+        self.y_diff1_index = 1
         self.rdn = np.random.RandomState(random_state_number)
         # data path can be testing or training data
         self.data_path = data_path
         # return data as numpy array
-        self.x, self.y, self.subgoals = load_data(self.data_path)
+        self.x, self.y, self.subgoals = load_data(self.data_path, cut=True)
+        self.max_step = self.y.shape[0]
         self.data_indexes = np.arange(self.x.shape[1], dtype=np.int)
         self.trace_length = self.x.shape[0]
         self.input_size = self.x.shape[2]
@@ -84,31 +87,38 @@ class ModelCarEnv():
         self.yt = self.y[:,self.data_index:self.data_index+1]
         self.xt_pt = Variable(torch.FloatTensor(self.xt))
         self.yt_pt = Variable(torch.FloatTensor(self.yt))
-        self.sgt_ind = list(self.subgoals[self.data_index, 0])
-        self.sgt_diff = self.subgoals[self.data_index, 1:]
+        self.sgt_ind = list(self.subgoals[self.data_index, :, 0])
+        self.sgt_diff = self.subgoals[self.data_index, :, 1:]
         self.index = 0
         # time required to complete circuit
         self.time = 0
-        self.finished = False
-        for i in range(self.lead_in):
+        pos0 = 0; pos1 = 0
+        #for i in range(self.lead_in):
+        for i in range(199):
             # use gt for action because this is the lead in
-            true_action = [self.xt[self.index+1,0,self.x_steering_index],
-                           self.xt[self.index+1,0,self.x_throttle_index]]
-            last_state = [self.index,self.time,self.xt_pt[self.index],h1_tm1,c1_tm1,h2_tm1,c2_tm1]
-            next_state, reward, self.finished = self.step(last_state, action=true_action)
-            self.index, uncounted_time, unused_pred_next_state, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = next_state
 
-        next_state = [self.index,self.time,self.xt_pt[self.index],h1_tm1,c1_tm1,h2_tm1,c2_tm1]
+            #true_action = [self.xt[self.index+1,0,self.x_steering_index],
+            #               self.xt[self.index+1,0,self.x_throttle_index]]
+            #last_state = [self.index,self.time,pos0,pos1,self.xt_pt[self.index],h1_tm1,c1_tm1,h2_tm1,c2_tm1]
+            #next_state, reward, finished = self.step(last_state, action=true_action)
+            # update position with diffs (this time from true value)
+            pos0 += self.yt[self.index, 0, self.y_diff0_index]
+            pos1 += self.yt[self.index, 0, self.y_diff1_index]
+            self.index+=1
+            print(pos0, pos1)
+            #self.index, uncounted_time, unused_pos0, unused_pos1, unused_pred_next_state, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = next_state
+
+        next_state = [self.index,self.time,pos0,pos1,self.xt_pt[self.index],h1_tm1,c1_tm1,h2_tm1,c2_tm1]
         return next_state
 
     def step(self, last_state, action, use_center=False):
         """
-        last_state is list with [index, last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1]
+        last_state is list with [index, time, pos0, pos1, last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1]
         action is list with [steering, throttle]
         use_center is bool; true means use the mean of the mdn, otherwise sample
         returns list text_state, float reward, bool finished
         """
-        index, t, last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = last_state
+        index, t, pos0, pos1, last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = last_state
         predict_output = predict(self.lstm, last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, trdn=self.rdn, use_center=use_center)
         pred, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = predict_output
 
@@ -116,32 +126,56 @@ class ModelCarEnv():
         # prevent zeros - don't count brake for now
         steering,throttle = action
         t += 1.0/(max([throttle,0.0])+1e-5)
-        reward, finished = self.calculate_reward(index, pred, t)
         index+=1
+        #print('predict', pred[0,0],pos0)
+        pos0 += pred[0,0]
+        pos1 += pred[0,1]
+        #print('after', pred[0,0],pos0)
+        reward, finished = self.calculate_reward(index, [pos0,pos1], t)
         # hack because i didn't train full state information
         # update predicted ydiff, xdiff
         next_x = self.xt[index]
         next_x[:,-2:] = torch.FloatTensor(pred).to(DEVICE)
-
-        next_state = [index, t, next_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1]
+        next_state = [index, t, pos0, pos1, next_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1]
         return next_state, reward, finished
 
     def calculate_distance_penalty(self, pred_tuple, true_tuple):
-        dist = np.square((pred_tuple[0]-true_tuple[0])**2 + (pred_tuple[1]-true_tuple[1])**2)
+        # measure absolute position error
+        print(pred_tuple, true_tuple)
+        dist = np.sqrt((pred_tuple[0]-true_tuple[0])**2 + (pred_tuple[1]-true_tuple[1])**2)
         return -dist
 
     def calculate_reward(self, index, pred_y, dt):
         finished = False
-        if index not in self.sgt_ind:
-            return 0, finished
-        else:
-            pen = self.calculate_distance_penalty(pred_tuple, self.sgt_diff[index])
+        reward = 0
+        if index in self.sgt_ind:
             tind = self.sgt_ind.index(index)
-            pen += dt/float(index)
+            reward = self.calculate_distance_penalty(pred_y, self.sgt_diff[tind])
+            #reward += dt/float(index)
             # if we are at last index
-            if tind == len(self.sgt_ind):
-                finished = True
-            return pen, finished
+        if index >= self.max_step:
+            finished = True
+        return reward, finished
+
+def complete_perfect_run():
+    env = ModelCarEnv()
+    last_state = env.reset()
+    index, time, pos0, pos1, pred_next_state, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = last_state
+    finished = False
+    reward = 0
+    while not finished:
+        # use gt for action because this is the lead in
+        # the last action cant be gotten from x because
+        true_action = [env.xt[index+1,0,env.x_steering_index],
+                       env.xt[index+1,0,env.x_throttle_index]]
+        true_next_state = env.xt_pt[index]
+        last_state = [index,time,pos0,pos1,true_next_state,h1_tm1,c1_tm1,h2_tm1,c2_tm1]
+        next_state, r, finished = env.step(last_state, action=true_action)
+        index, time, pos0, pos1, pred_next_state, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = next_state
+        pos0 += pos0; pos1 += pos1
+        reward+=r
+    print("finished with  reward", r)
+    embed()
 
 
 
@@ -177,8 +211,7 @@ if __name__ == '__main__':
     else:
         DEVICE = 'cpu'
 
-    env = ModelCarEnv()
-    last_state = env.reset()
+    complete_perfect_run()
     embed()
 
 
