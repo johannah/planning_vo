@@ -13,11 +13,16 @@ if not len(files):
     print("no files at", search)
     sys.exit()
 else:
-   #raw = np.load('icra2019_vehicle_data_2018-09-12_0643_files.npz')
-    if not len(files):
-        print("found no files at search=%s" %search)
-        sys.exit()
-    fname = files[0]
+    #raw = np.load('icra2019_vehicle_data_2018-09-12_0643_files.npz')
+    # TODO sort on date, then size
+    if len(files) > 1:
+        print('i dont know which file to use.....')
+        print('set index = to the file you want to use, then type exit()')
+        print(files)
+        embed()
+    else:
+        index = 0
+    fname = files[index]
     raw = np.load(fname)
 states = raw['states']
 names = raw['bagnames']
