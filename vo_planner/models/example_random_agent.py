@@ -6,7 +6,6 @@ import time
 import os, sys
 import numpy as np
 import matplotlib.pyplot as plt
-import torch.nn.init as init
 from IPython import embed
 import shutil
 from model_car_env import ModelCarEnv, plot_results, savedir
