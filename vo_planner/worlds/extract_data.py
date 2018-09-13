@@ -18,7 +18,7 @@ num_subgoals_per_trace = 25
 # action array (steering, gas)
 
 def get_sequences(inds, tracks, astates, aactions):
-    state_seqs = np.zeros((chunks_per_episode*astates.shape[0],max_chunk_length,11))
+    state_seqs = np.zeros((chunks_per_episode*astates.shape[0],max_chunk_length,7))
     cnt = 0
     details = []
     all_subgoals = []
@@ -47,9 +47,15 @@ def get_sequences(inds, tracks, astates, aactions):
             su1 = pos1[abs_subgoals]
             subgoals = np.array([abs_subgoals,su1[:,0],su0[:,0]]).T
             all_subgoals.append(subgoals)
-            # name of states [pos0,pos1,speed,angle,steer,gas,brake,diffy,diffx,steering,throttle]
-            data = states[st:en,[3,4,5,6,0]]
-            state_seqs[cnt,:en-st,:] = np.hstack((pos0, pos1, data, diff0, diff1, actions[st:en]))
+            # the data coming in from states is (after removing img in index 0 above)
+            #     0        1    2      3    4            5            6
+            # true_speed, w0py, w0px, yaw, wheel_steer, wheel_gas, wheel_brake
+            # realistically, i dont think we will have all of these
+            # turn it into the following
+            data = states[st:en,3:4]
+            # name of states [pos0,pos1,angle,diffy,diffx,steering,throttle]
+            out = np.hstack((pos0, pos1, data, diff0, diff1, actions[st:en]))
+            state_seqs[cnt,:en-st,:] = out
             cnt+=1
 
     print("finished with cnt", cnt, state_seqs.shape, len(details))

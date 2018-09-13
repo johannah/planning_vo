@@ -91,7 +91,8 @@ def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=Fal
         strokes[i] = pred
         last_x = x[i+1,:]
         if not teacher_force_predict and i>lead_in:
-            last_x[:,-2:] = torch.FloatTensor(pred)
+            # replace next state with my predicted state
+            last_x[:,[0,1]] = torch.FloatTensor(pred)
 
     ytrue = y.cpu().data.numpy()
     return strokes, ytrue
@@ -131,7 +132,7 @@ if __name__ == '__main__':
     parser.add_argument('-bn', '--batch_num',type=int, default=0, help='index into batch from teacher force to use')
     parser.add_argument('--whole_batch', action='store_true', default=False, help='plot an entire batch')
     parser.add_argument('--num_plot', default=10, type=int, help='number of examples from training and test to plot')
-    parser.add_argument('-l', '--lead_in', default=5, type=int, help='number of examples to teacher force before running')
+    parser.add_argument('-l', '--lead_in', default=10, type=int, help='number of examples to teacher force before running')
 
     args = parser.parse_args()
 

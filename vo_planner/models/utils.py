@@ -92,13 +92,14 @@ def load_data(load_path, cut=False):
     estates = data['states']
     # details is [episode, start, end, length of sequence from episode]
     edetails = data['details']
-    subgoals = data['subgoals']
+    subgoals = np.swapaxes(data['subgoals'], 0,1)
     # shuffle the indexes
     indexes = np.arange(estates.shape[0])
     rdn.shuffle(indexes)
     # change to [timestep, batch, features]
     states = estates[indexes].swapaxes(1,0)
     details = edetails[indexes]
+    # AS OF Sept 12 this is old - have different format
     # change data type and shape, move from numpy to torch
     # note that we need to convert all data to np.float32 for pytorch
     #   0    1     2    3      4    5   6     7    8      9         10
@@ -108,23 +109,44 @@ def load_data(load_path, cut=False):
     #x_variable = Variable(x_tensor, requires_grad=True)
     #y_variable = Variable(y_tensor, requires_grad=False)
     # dont cut off for the rl case in which we need the last state
+#    if cut:
+#        x = np.array(states[:,:,[2,3,4,9,10,7,8]], dtype=np.float32)
+#    else:
+#        x = np.array(states[:-1,:,[2,3,4,9,10,7,8]], dtype=np.float32)
+#    # one time step ahead to predict diffs
+#    y = np.array(states[1:,:,[7,8]], dtype=np.float32)
+
+    #                     0   1     2     3     4      5        6
+    # # name of states [pos0,pos1,yaw,diffy,diffx,steering,throttle]
+    # assume actions (5,6) are given
+    #x                   0       1      2        3
+    # # name of states [diff0,diff1,steering,throttle]
+    # indexes
+    keys = {
+            'x_diff0':0,
+            'x_diff1':1,
+            'x_steering':2,
+            'x_throttle':3,
+            'y_diff0':0,
+            'y_diff1':1}
+    pts = states[:,:,[0,1]]
     if cut:
-        x = np.array(states[:,:,[2,3,4,9,10,7,8]], dtype=np.float32)
+        x = np.array(states[:,:,[3,4,5,6]], dtype=np.float32)
     else:
-        x = np.array(states[:-1,:,[2,3,4,9,10,7,8]], dtype=np.float32)
+        x = np.array(states[:-1,:,[3,4,5,6]], dtype=np.float32)
     # one time step ahead to predict diffs
-    y = np.array(states[1:,:,[7,8]], dtype=np.float32)
-    return x, y, subgoals
+    y = np.array(states[1:,:,[3,4]], dtype=np.float32)
+    return x, y, subgoals, keys, pts
 
 
 class DataLoader():
     def __init__(self, train_load_path, test_load_path, batch_size=32, random_number=394):
         self.rdn = np.random.RandomState(random_number)
         self.batch_size = batch_size
-        self.x, self.y, _ = load_data(train_load_path)
+        self.x,self.y, _, _, _ = load_data(train_load_path)
         self.num_batches = self.x.shape[1]//self.batch_size
         self.batch_array = np.arange(self.x.shape[1])
-        self.valid_x, self.valid_y = load_data(test_load_path)
+        self.valid_x,self.valid_y,_,_,_ = load_data(test_load_path)
 
     def validation_data(self):
         max_idx = min(self.batch_size, self.valid_x.shape[1])
@@ -133,50 +155,6 @@ class DataLoader():
     def next_batch(self):
         batch_choice = self.rdn.choice(self.batch_array, self.batch_size,replace=False)
         return self.x[:,batch_choice], self.y[:,batch_choice]
-
-def teacher_force_predict(lstm, hidden_size, DEVICE, mse_loss, x, y):
-    # not done
-    bs = x.shape[1]
-    h1_tm1 = Variable(torch.zeros((bs, hidden_size))).to(DEVICE)
-    c1_tm1 = Variable(torch.zeros((bs, hidden_size))).to(DEVICE)
-    h2_tm1 = Variable(torch.zeros((bs, hidden_size))).to(DEVICE)
-    c2_tm1 = Variable(torch.zeros((bs, hidden_size))).to(DEVICE)
-    outputs = []
-    # one batch of x
-    for i in np.arange(0,x.shape[0]):
-        output, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = lstm(x[i].to(DEVICE), h1_tm1, c1_tm1, h2_tm1, c2_tm1)
-        outputs+=[output]
-    y_pred = torch.stack(outputs, 0)
-    mse_loss = ((y_pred-y.to(DEVICE))**2)
-    losses = list(mse_loss.data.numpy())
-    return y_pred, losses
-
-def predict(lstm, hidden_size, DEVICE, mse_loss, x, y):
-    # not done
-    bs = x.shape[1]
-    h1_tm1 = Variable(torch.zeros((bs, hidden_size))).to(DEVICE)
-    c1_tm1 = Variable(torch.zeros((bs, hidden_size))).to(DEVICE)
-    h2_tm1 = Variable(torch.zeros((bs, hidden_size))).to(DEVICE)
-    c2_tm1 = Variable(torch.zeros((bs, hidden_size))).to(DEVICE)
-    outputs = []
-    input_data = x[0]
-    # one batch of x
-    for i in np.arange(x.shape[0]):
-        output, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = lstm(input_data.to(DEVICE), h1_tm1, c1_tm1, h2_tm1, c2_tm1)
-        outputs+=[output]
-        if i < x.shape[0]-1:
-            input_data = x[i+1]
-            # replace the offset with the predicted offset
-            #if i < 10:
-            #    print(input_data[:,[4,5,6]])
-            #    print(output)
-            #    print('-------------',i+1)
-            input_data[:,[4,5,6]] = output
-    y_pred = torch.stack(outputs, 0)
-    #print(y_pred.shape)
-    mse_loss = ((y_pred-y)**2)
-    losses = list(mse_loss.data.numpy())
-    return y_pred, losses
 
 def plot_traces(trues_e, tf_predicts_e, predicts_e, filename):
     ugty = np.cumsum(trues_e[:,0])

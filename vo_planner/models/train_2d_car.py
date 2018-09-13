@@ -128,7 +128,7 @@ if __name__ == '__main__':
     batch_size = 32
     seq_length = 200
     hidden_size = 1024
-    savedir = 'mdn_2d_models'
+    savedir = 'saved_models'
     number_mixtures = 20
     grad_clip = 5
     train_losses, test_losses, train_cnts, test_cnts = [], [], [], []
