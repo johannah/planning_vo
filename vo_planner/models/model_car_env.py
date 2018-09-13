@@ -29,7 +29,7 @@ class ModelCarEnv():
     def __init__(self, data_path='../data/train_2d_controller.npz',
                        device='cpu',
                        number_mixtures=20, hidden_size=1024,
-                       batch_size=1, lead_in=15,
+                       batch_size=1, lead_in=5,
                        model_load_path='saved_models/model_000000006500000.pkl',
                        random_state_number=44):
 
@@ -192,9 +192,8 @@ def plot_results(true_trace, pred_trace, subgoals, path='ex.png', title='', lead
     plt.savefig(path)
     plt.close()
 
-def complete_perfect_run():
+def complete_perfect_run(env):
     # function for sanity checking env
-    env = ModelCarEnv()
     last_state = env.reset()
     index, time, pos0, pos1, pred_y, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = last_state
     finished = False
@@ -224,7 +223,8 @@ def complete_perfect_run():
     embed()
 
 if __name__ == '__main__':
-    complete_perfect_run()
+    tenv = ModelCarEnv()
+    complete_perfect_run(tenv)
     embed()
 
 
