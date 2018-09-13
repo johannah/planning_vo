@@ -117,7 +117,7 @@ class ModelCarEnv():
 
     def step(self, last_state, action, use_center=False):
         """
-        last_state is list with [index, time, pos0, pos1, last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1]
+        last_state is list with [index, time, pos0, pos1, last_pred, h1_tm1, c1_tm1, h2_tm1, c2_tm1]
         action is list with [steering, throttle]
         use_center is bool; true means use the mean of the mdn, otherwise sample
         returns list text_state, float reward, bool finished
