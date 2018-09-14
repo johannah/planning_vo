@@ -42,9 +42,36 @@ def get_dummy_data(v_x, v_y):
         v_y[:,i] = v_y[:,0]
     return v_x, v_y
 
+
+def plot_strokes_vo(strokes_x_in, strokes_y_in, strokes_vo_in, lead_in=0, name='example.png',pen=True):
+    f, ax1 = plt.subplots(1,1, figsize=(6,6))
+    strokes_x = deepcopy(strokes_x_in)
+    for i in range(strokes_x.shape[1]):
+        strokes_xi = np.cumsum(deepcopy(strokes_x[:,i]), axis=0)
+        if not i:
+            ax1.plot(strokes_xi[:,0], strokes_xi[:,1], c='b', label='%s pred'%strokes_x.shape[1], linewidth=.5, alpha=0.5)
+        else:
+            ax1.plot(strokes_xi[:,0], strokes_xi[:,1], c='b', linewidth=.5, alpha=.5)
+        ax1.scatter(strokes_xi[:,0], strokes_xi[:,1], c='b', s=.2, alpha=.5)
+    if np.abs(strokes_y_in).sum()>0:
+        strokes_y = deepcopy(strokes_y_in)
+        strokes_y = np.cumsum(strokes_y, axis=0)
+        ax1.scatter(strokes_y[:,0,0], strokes_y[:,0,1], c='g', s=.9)
+        ax1.plot(strokes_y[:,0,0], strokes_y[:,0,1], c='g', label='gt', linewidth=2, alpha=.9)
+    if lead_in:
+        ax1.scatter([strokes_y[lead_in,0,0]], [strokes_y[lead_in,0,1]], c='r', marker='o', s=10, label='lead in')
+    strokes_vo = np.cumsum(deepcopy(strokes_vo_in), axis=0)
+    ax1.plot(strokes_vo[:,0,0], strokes_vo[:,0,1], c='orangered', label='vo', linewidth=.9, alpha=0.5)
+    ax1.scatter([[strokes_y[0,0,0]]], [[strokes_y[0,0,1]]], c='k', marker='o', s=10, edgecolor='k', label='start')
+    ax1.legend()
+    print('plotting %s'%name)
+    plt.savefig(name)
+    plt.close()
+
 def plot_strokes(strokes_x_in, strokes_y_in, lead_in=0, name='example.png',pen=True):
     strokes_x = deepcopy(strokes_x_in)
     f, ax1 = plt.subplots(1,1, figsize=(6,3))
+    gt = 'lightseageen'
 
     if pen: # pen up pen down is third channel
         strokes_x[:, :2] = np.cumsum(strokes_x[:, :2], axis=0)
@@ -55,9 +82,9 @@ def plot_strokes(strokes_x_in, strokes_y_in, lead_in=0, name='example.png',pen=T
         if np.abs(strokes_y_in).sum()>0:
             strokes_y = deepcopy(strokes_y_in)
             strokes_y[:, :2] = np.cumsum(strokes_y[:, :2], axis=0)
-            ax1.scatter(strokes_y[:,0], -strokes_y[:,1], c='g', s=2, label='gt')
+            ax1.scatter(strokes_y[:,0], -strokes_y[:,1], c=gt, s=2, label='gt')
             for stroke in split_strokes(strokes_y):
-                ax1.plot(stroke[:,0], -stroke[:,1], c='g', linewidth=1)
+                ax1.plot(stroke[:,0], -stroke[:,1], c=gt, linewidth=1)
     else:
         # no pen indicator
         for i in range(strokes_x.shape[1]):
@@ -85,7 +112,51 @@ def save_checkpoint(state, filename='model.pkl'):
     torch.save(state, filename)
     print("finishing save of {}".format(filename))
 
-def load_data(load_path, cut=False):
+def load_car_continuous_all(load_path):
+    raw = np.load(load_path)
+    states = raw['states']; names = raw['bagnames']; k = raw['keys'].item()
+    dk = data_keys = {
+                'x_mldiffx':0,
+                'x_mldiffy':1,
+                'x_dsodiffx':2,
+                'x_dsodiffy':3,
+                'x_stat_good':4,
+                'x_stat_bad':5,
+                'x_steering':6,
+                'x_throttle':7,
+                'y_diffx':0,
+                'y_diffy':1}
+    x_raw_index = [k['ml_xdiff'], k['ml_ydiff'],
+                     k['dso_xdiff'], k['dso_ydiff'],
+                     k['stat_good'], k['stat_bad'],
+                     k['steering'], k['throttle']]
+    y_raw_index = [k['ml_xdiff'], k['ml_ydiff']]
+
+    x = np.array(states[:-1,:,x_raw_index], dtype=np.float32)
+    y = np.array(states[1:,:,y_raw_index], dtype=np.float32)
+    pts = states[:,:,[k['ml_x'], k['ml_y']]]
+    return x, y, [], data_keys, pts, states, k
+
+def load_car_continuous_dead_reckoning(load_path):
+    raw = np.load(load_path)
+    states = raw['states']; names = raw['bagnames']; k = raw['keys'].item()
+    dk = data_keys = {
+                'x_mldiffx':0,
+                'x_mldiffy':1,
+                'x_steering':6,
+                'x_throttle':7,
+                'y_diffx':0,
+                'y_diffy':1}
+        # yikes ^ i swapped indexes - x should be zero, y should be one
+    x_raw_index = [k['ml_xdiff'], k['ml_ydiff'],
+                   k['steering'], k['throttle']]
+    y_raw_index = [k['ml_xdiff'], k['ml_ydiff']]
+    x = np.array(states[:-1,:,x_raw_index], dtype=np.float32)
+    y = np.array(states[1:,:,y_raw_index], dtype=np.float32)
+    pts = states[:,:,[k['ml_x'], k['ml_y']]]
+    return x, y, [], data_keys, pts, states, k
+
+def load_sim_data(load_path, cut=False):
     data = np.load(load_path)
     # name of features [pos0,pos1,speed,angle,steer,gas,brake,diffy,diffx,steering,throttle]
     # shape is [trace number, sequence, features]
@@ -136,17 +207,17 @@ def load_data(load_path, cut=False):
         x = np.array(states[:-1,:,[3,4,5,6]], dtype=np.float32)
     # one time step ahead to predict diffs
     y = np.array(states[1:,:,[3,4]], dtype=np.float32)
-    return x, y, subgoals, keys, pts
+    return x, y, subgoals, keys, pts, states, {}
 
 
 class DataLoader():
-    def __init__(self, train_load_path, test_load_path, batch_size=32, random_number=394):
+    def __init__(self, load_function, train_load_path, test_load_path, batch_size=32, random_number=394):
         self.rdn = np.random.RandomState(random_number)
         self.batch_size = batch_size
-        self.x,self.y, _, _, _ = load_data(train_load_path)
+        self.x,self.y,self.x_subgoals,self.x_keys,self.x_pts,self.x_state, self.state_keys = load_function(train_load_path)
         self.num_batches = self.x.shape[1]//self.batch_size
         self.batch_array = np.arange(self.x.shape[1])
-        self.valid_x,self.valid_y,_,_,_ = load_data(test_load_path)
+        self.valid_x,self.valid_y,self.v_x_subgoals,self.v_x_keys,self.v_x_pts, self.v_state, _ = load_function(test_load_path)
 
     def validation_data(self):
         max_idx = min(self.batch_size, self.valid_x.shape[1])

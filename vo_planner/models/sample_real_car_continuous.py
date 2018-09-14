@@ -19,7 +19,8 @@ import torch # package for building functions with learnable parameters
 import torch.nn as nn # prebuilt functions specific to neural networks
 from torch.autograd import Variable # storing data while learning
 from mdn_lstm import mdnLSTM
-from utils import save_checkpoint, plot_strokes, get_dummy_data, DataLoader
+from utils import save_checkpoint, plot_strokes_vo
+from utils import DataLoader, load_car_continuous_all, load_car_continuous_dead_reckoning
 rdn = np.random.RandomState(33)
 # TODO one-hot the action space?
 
@@ -68,7 +69,9 @@ def predict(tlstm, x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, trdn, use_center=True):
         preds.append(pred)
     return np.array(preds), h1_tm1, c1_tm1, h2_tm1, c2_tm1
 
-def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=False, bn=0, batch_size=1, lead_in=2):
+def generate(xbatch, ybatch, k, num=200, teacher_force_predict=True, use_center=False, bn=0, batch_size=1, lead_in=2):
+    xindexes = [k['x_mldiffx'],k['x_mldiffy']]
+    yindexes = [k['y_diffx'],k['y_diffy']]
     h1_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
     c1_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
     h2_tm1 = Variable(torch.zeros((batch_size, hidden_size))).to(DEVICE)
@@ -83,13 +86,16 @@ def generate(xbatch, ybatch, num=200, teacher_force_predict=True, use_center=Fal
     y.to(DEVICE)
     last_x = x[0,:]
     strokes = np.zeros((num,batch_size,output_size), dtype=np.float32)
-    for i in range(num-1):
+    for i in range(num):
         pred, h1_tm1, c1_tm1, h2_tm1, c2_tm1 = predict(lstm, last_x, h1_tm1, c1_tm1, h2_tm1, c2_tm1, trdn=rdn, use_center=use_center)
+        # found in data
+        pred = pred.clip(-.65, .65)
         strokes[i] = pred
-        last_x = x[i+1,:]
-        if not teacher_force_predict and i>lead_in:
-            # replace next state with my predicted state
-            last_x[:,[0,1]] = torch.FloatTensor(pred)
+        if i < num-1:
+            last_x = x[i+1,:]
+            if not teacher_force_predict and i>lead_in:
+                # replace next state with my predicted state
+                last_x[:,xindexes] = torch.FloatTensor(pred[:,yindexes])
 
     ytrue = y.cpu().data.numpy()
     return strokes, ytrue
@@ -120,6 +126,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('model_loadname', default=default_model_loadname)
     parser.add_argument('-c', '--cuda', action='store_true', default=False)
+    parser.add_argument('-dr', '--dead_reckoning', action='store_true', default=False)
     parser.add_argument('-uc', '--use_center', action='store_true', default=False, help='use means instead of sampling')
     parser.add_argument('-tf', '--teacher_force', action='store_true', default=False)
     parser.add_argument('--training', action='store_true', default=False, help='generate from training set rather than test set')
@@ -131,14 +138,18 @@ if __name__ == '__main__':
     parser.add_argument('-l', '--lead_in', default=10, type=int, help='number of examples to teacher force before running')
 
     args = parser.parse_args()
-
     if args.cuda:
         DEVICE = 'cuda'
     else:
         DEVICE = 'cpu'
-    data_loader = DataLoader(train_load_path='../data/train_2d_controller.npz',
-                                 test_load_path='../data/train_2d_controller.npz',
-                                 batch_size=data_batch_size)
+
+    if args.dead_reckoning:
+        load_function = load_car_continuous_dead_reckoning
+    else:
+        load_function = load_car_continuous_all
+    data_loader = DataLoader(load_function, train_load_path='../data/icra2019_vehicle_data_2018-09-13_1670_files_train.npz',
+                              test_load_path='../data/icra2019_vehicle_data_2018-09-13_1670_files_test.npz',
+                              batch_size=data_batch_size)
     if args.training:
         print("using training data")
         xnp,ynp = data_loader.next_batch()
@@ -164,21 +175,29 @@ if __name__ == '__main__':
         train_losses = lstm_dict['train_losses']
         test_cnts = lstm_dict['test_cnts']
         test_losses = lstm_dict['test_losses']
-
+    k = data_loader.x_keys
     if args.batch_num > data_loader.batch_size:
         args.batch_num = 0
 
     if args.teacher_force:
         args.lead_in = 0
 
+    # get vo now so we don't have to handle dead reckoning case
+    dso_ind = [data_loader.state_keys['dso_xdiff'], data_loader.state_keys['dso_ydiff']]
+    if args.training:
+        vo = data_loader.x_state[:,:,dso_ind]
+    else:
+        vo = data_loader.v_state[:,:,dso_ind]
+
     if not args.whole_batch:
-        strokes, ytrue = generate(x,y,num=args.num,teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=args.batch_num, batch_size=args.batch_size, lead_in=args.lead_in)
+        bn = args.batch_num
+        strokes, ytrue = generate(x,y,k,num=args.num,teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=bn, batch_size=args.batch_size, lead_in=args.lead_in)
         fname = get_plot_name(args.model_loadname, args.training, args.batch_num,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
-        plot_strokes(strokes, ytrue, lead_in=args.lead_in, name=fname, pen=False)
+        plot_strokes_vo(strokes, ytrue, vo[:,bn:bn+1], lead_in=args.lead_in, name=fname, pen=False)
     else:
         for bn in range(data_loader.batch_size):
-            strokes, ytrue = generate(x,y,num=args.num, teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=bn, batch_size=args.batch_size, lead_in=args.lead_in)
+            strokes, ytrue = generate(x,y,k,num=args.num, teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=bn, batch_size=args.batch_size, lead_in=args.lead_in)
             fname = get_plot_name(args.model_loadname, args.training, bn,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
-            plot_strokes(strokes, ytrue, lead_in=args.lead_in, name=fname, pen=False)
+            plot_strokes_vo(strokes, ytrue, vo[:,bn:bn+1], lead_in=args.lead_in, name=fname, pen=False)
 
 

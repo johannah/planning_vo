@@ -19,14 +19,14 @@ import torch # package for building functions with learnable parameters
 import torch.nn as nn # prebuilt functions specific to neural networks
 from torch.autograd import Variable # storing data while learning
 from mdn_lstm import mdnLSTM
-from utils import save_checkpoint, plot_strokes, get_dummy_data, load_data
+from utils import save_checkpoint, plot_strokes, get_dummy_data, load_sim_data
 from sample_2d_car import predict
 rdn = np.random.RandomState(33)
 torch.manual_seed(139)
 savedir = 'predictions'
 
 class ModelCarEnv():
-    def __init__(self, data_path='../data/train_2d_controller.npz',
+    def __init__(self, data_function=load_sim_data, data_path='../data/train_2d_controller.npz',
                        device='cpu',
                        number_mixtures=20, hidden_size=1024,
                        batch_size=1, lead_in=5,
@@ -39,7 +39,7 @@ class ModelCarEnv():
         self.data_path = data_path
         self.finished = True
         # return data as numpy array
-        self.x, self.y, self.subgoals, self.keys, self.pts = load_data(self.data_path, cut=True)
+        self.x, self.y, self.subgoals, self.keys, self.pts = load_function(self.data_path, cut=True)
         # ughhh TODO one hot the action data in the simulation model
         self.steering_actions = [-1, -0.5, 0, 0.5, 1]
         self.throttle_actions = [-.5, .2, .4, .6, .8]
