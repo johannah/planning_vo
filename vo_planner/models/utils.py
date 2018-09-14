@@ -121,14 +121,13 @@ def load_car_continuous_all(load_path):
                 'x_dsodiffx':2,
                 'x_dsodiffy':3,
                 'x_stat_good':4,
-                'x_stat_bad':5,
-                'x_steering':6,
-                'x_throttle':7,
+                'x_steering':5,
+                'x_throttle':6,
                 'y_diffx':0,
                 'y_diffy':1}
     x_raw_index = [k['ml_xdiff'], k['ml_ydiff'],
                      k['dso_xdiff'], k['dso_ydiff'],
-                     k['stat_good'], k['stat_bad'],
+                     k['stat_good'],
                      k['steering'], k['throttle']]
     y_raw_index = [k['ml_xdiff'], k['ml_ydiff']]
 
@@ -143,8 +142,8 @@ def load_car_continuous_dead_reckoning(load_path):
     dk = data_keys = {
                 'x_mldiffx':0,
                 'x_mldiffy':1,
-                'x_steering':6,
-                'x_throttle':7,
+                'x_steering':2,
+                'x_throttle':3,
                 'y_diffx':0,
                 'y_diffy':1}
         # yikes ^ i swapped indexes - x should be zero, y should be one

@@ -153,9 +153,11 @@ if __name__ == '__main__':
     if args.training:
         print("using training data")
         xnp,ynp = data_loader.next_batch()
+        pref = 'train'
     else:
         print("using validation data")
         xnp,ynp = data_loader.validation_data()
+        pref = ''
 
     output_size = ynp.shape[2]
     input_size = xnp.shape[2]
@@ -198,6 +200,15 @@ if __name__ == '__main__':
         for bn in range(data_loader.batch_size):
             strokes, ytrue = generate(x,y,k,num=args.num, teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=bn, batch_size=args.batch_size, lead_in=args.lead_in)
             fname = get_plot_name(args.model_loadname, args.training, bn,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
+
+            f,ax = plt.subplots(2,1)
+
+            ax[0].plot(xnp[:,bn,2]);
+            ax[0].set_title('steer')
+            ax[1].plot(xnp[:,bn,3]);
+            ax[1].set_title('thrust')
+            plt.savefig('%saction%02d.png'%(pref,bn))
+
             plot_strokes_vo(strokes, ytrue, vo[:,bn:bn+1], lead_in=args.lead_in, name=fname, pen=False)
 
 

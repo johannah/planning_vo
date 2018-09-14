@@ -173,8 +173,6 @@ if __name__ == '__main__':
     v_y = Variable(torch.FloatTensor(v_ynp))
     input_size = v_x.shape[2]
     output_shape = v_y.shape[2]
-
-    embed()
     lstm = mdnLSTM(input_size=input_size, hidden_size=hidden_size, number_mixtures=number_mixtures).to(DEVICE)
     optim = torch.optim.Adam(lstm.parameters(), lr=args.learning_rate)
 
