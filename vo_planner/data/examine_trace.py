@@ -5,25 +5,14 @@ import matplotlib.pyplot as plt
 from IPython import embed
 import os, sys
 from glob import glob
-search = 'icra2019_vehicle_data*.npz'
 # set to false to remove pandas dependency
 add_bagnames = True
-files = sorted(glob(search))
-if not len(files):
-    print("no files at", search)
+if not len(sys.argv) == 2:
+    print('please pass name of npz file with all data')
+    print('passed', sys.argv)
     sys.exit()
-else:
-    #raw = np.load('icra2019_vehicle_data_2018-09-12_0643_files.npz')
-    # TODO sort on date, then size
-    if len(files) > 1:
-        print('i dont know which file to use.....')
-        print('set index = to the file you want to use, then type exit()')
-        print(files)
-        embed()
-    else:
-        index = 0
-    fname = files[index]
-    raw = np.load(fname)
+fname = sys.argv[1]
+raw = np.load(fname)
 states = raw['states']
 names = raw['bagnames']
 k = raw['keys'].item()

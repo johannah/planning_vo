@@ -154,7 +154,7 @@ if __name__ == '__main__':
     save_every = args.save_every
     savedir = args.model_save_dir
     if args.dead_reckoning:
-        savedir += 'dead_reckoning'
+        savedir += '_dead_reckoning'
         load_function = load_car_continuous_dead_reckoning
     else:
         load_function = load_car_continuous_all
