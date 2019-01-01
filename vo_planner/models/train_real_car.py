@@ -59,6 +59,13 @@ def train(x, y, validation=False):
             p.grad.data.clamp_(min=-grad_clip,max=grad_clip)
         optim.step()
     rloss = loss.cpu().data.numpy()
+    if np.isinf(rloss):
+        print('encountered inf')
+        embed()
+    if np.isnan(rloss):
+        print('encountered nan')
+        embed()
+
     return y_pred, rloss
 
 def rolling_average(a, n=10) :
@@ -91,11 +98,12 @@ def loop(data_loader, num_epochs=1000, save_every=1000, train_losses=[], test_lo
             y_pred, loss = train(x,y,validation=False)
             train_cnts.append(cnt)
             train_losses.append(loss)
-            if cnt%100:
+            do_save = cnt-last_save >= save_every
+            if not cnt%100 or do_save:
                 valy_pred, val_mean_loss = train(v_x,v_y,validation=True)
                 test_losses.append(val_mean_loss)
                 test_cnts.append(cnt)
-            if cnt-last_save >= save_every:
+            if do_save:
                 last_save = cnt
                 # find test loss
                 print('epoch: {} saving after example {} train loss {} test loss {}'.format(e,cnt,loss,val_mean_loss))

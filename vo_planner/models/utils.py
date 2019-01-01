@@ -18,10 +18,10 @@ rdn = np.random.RandomState(33)
 torch.manual_seed(139)
 
 def plot_losses(train_cnts, train_losses, test_cnts, test_losses, name='loss_example.png'):
-    plt.figure(figsize=(3,3))
-    plt.plot(train_cnts, train_losses, label='train loss', lw=3)
-    plt.plot(test_cnts, test_losses, label='test loss', lw=1)
-    plt.legend()
+    f,ax=plt.subplots(1,1,figsize=(3,3))
+    ax.plot(train_cnts, train_losses, label='train loss', lw=1)
+    ax.plot(test_cnts, test_losses, label='test loss', lw=1)
+    ax.legend()
     plt.savefig(name)
     plt.close()
 
@@ -42,28 +42,27 @@ def get_dummy_data(v_x, v_y):
         v_y[:,i] = v_y[:,0]
     return v_x, v_y
 
-
 def plot_strokes_vo(strokes_x_in, strokes_y_in, strokes_vo_in, lead_in=0, name='example.png',pen=True):
     f, ax1 = plt.subplots(1,1, figsize=(6,6))
     strokes_x = deepcopy(strokes_x_in)
     for i in range(strokes_x.shape[1]):
         strokes_xi = np.cumsum(deepcopy(strokes_x[:,i]), axis=0)
         if not i:
-            ax1.plot(strokes_xi[:,0], strokes_xi[:,1], c='b', label='%s pred'%strokes_x.shape[1], linewidth=.5, alpha=0.5)
+            ax1.plot(strokes_xi[:,0], strokes_xi[:,1], c='b', label='%s pred paths'%strokes_x.shape[1], linewidth=.5, alpha=0.5)
         else:
             ax1.plot(strokes_xi[:,0], strokes_xi[:,1], c='b', linewidth=.5, alpha=.5)
         ax1.scatter(strokes_xi[:,0], strokes_xi[:,1], c='b', s=.2, alpha=.5)
-    if np.abs(strokes_y_in).sum()>0:
-        strokes_y = deepcopy(strokes_y_in)
-        strokes_y = np.cumsum(strokes_y, axis=0)
-        ax1.scatter(strokes_y[:,0,0], strokes_y[:,0,1], c='g', s=.9)
-        ax1.plot(strokes_y[:,0,0], strokes_y[:,0,1], c='g', label='gt', linewidth=2, alpha=.9)
+    strokes_y = np.cumsum(strokes_y_in, axis=0)
+    sc=ax1.scatter(strokes_y[:,0,0], strokes_y[:,0,1], c=np.arange(strokes_y.shape[0]),  s=10)
+    #ax1.scatter(strokes_y[:,0,0], strokes_y[:,0,1], c='g', s=.9)
+    #ax1.plot(strokes_y[:,0,0], strokes_y[:,0,1], c='g',label='gt', linewidth=2, alpha=.9)
     if lead_in:
         ax1.scatter([strokes_y[lead_in,0,0]], [strokes_y[lead_in,0,1]], c='r', marker='o', s=10, label='lead in')
     strokes_vo = np.cumsum(deepcopy(strokes_vo_in), axis=0)
     ax1.plot(strokes_vo[:,0,0], strokes_vo[:,0,1], c='orangered', label='vo', linewidth=.9, alpha=0.5)
     ax1.scatter([[strokes_y[0,0,0]]], [[strokes_y[0,0,1]]], c='k', marker='o', s=10, edgecolor='k', label='start')
     ax1.legend()
+    plt.colorbar(sc)
     print('plotting %s'%name)
     plt.savefig(name)
     plt.close()
@@ -75,32 +74,34 @@ def plot_strokes(strokes_x_in, strokes_y_in, lead_in=0, name='example.png',pen=T
 
     if pen: # pen up pen down is third channel
         strokes_x[:, :2] = np.cumsum(strokes_x[:, :2], axis=0)
-        ax1.scatter(strokes_x[:,0], -strokes_x[:,1], c='b', s=2, label='pred')
+        ax1.scatter(strokes_x[:,0], -strokes_x[:,1], c='b', s=2, label='pred path')
         for stroke in split_strokes(strokes_x):
             ax1.plot(stroke[:,0], -stroke[:,1], c='b', linewidth=1)
 
         if np.abs(strokes_y_in).sum()>0:
             strokes_y = deepcopy(strokes_y_in)
             strokes_y[:, :2] = np.cumsum(strokes_y[:, :2], axis=0)
-            ax1.scatter(strokes_y[:,0], -strokes_y[:,1], c=gt, s=2, label='gt')
+            ax1.scatter(strokes_y[:,0], -strokes_y[:,1], c=gt, s=2, label='true path')
             for stroke in split_strokes(strokes_y):
                 ax1.plot(stroke[:,0], -stroke[:,1], c=gt, linewidth=1)
     else:
         # no pen indicator
+        pc = 'cornflowerblue'
+        gt = 'lightsalmon'
         for i in range(strokes_x.shape[1]):
             strokes_xi = np.cumsum(deepcopy(strokes_x[:,i]), axis=0)
             if not i:
-                ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c='b', label='%s pred'%strokes_x.shape[1], linewidth=.5, alpha=0.5)
+                ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c=pc, label='%s pred paths'%strokes_x.shape[1], linewidth=.5, alpha=0.5)
             else:
-                ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c='b', linewidth=.5, alpha=.5)
-            ax1.scatter(strokes_xi[:,0], -strokes_xi[:,1], c='b', s=.2, alpha=.5)
+                ax1.plot(strokes_xi[:,0], -strokes_xi[:,1], c=pc, linewidth=.5, alpha=.5)
+            ax1.scatter(strokes_xi[:,0], -strokes_xi[:,1], c=pc, s=.2, alpha=.5)
         if np.abs(strokes_y_in).sum()>0:
             strokes_y = deepcopy(strokes_y_in)
             strokes_y = np.cumsum(strokes_y, axis=0)
-            ax1.scatter(strokes_y[:,0,0], -strokes_y[:,0,1], c='g', s=.9)
-            ax1.plot(strokes_y[:,0,0], -strokes_y[:,0,1], c='g', label='gt', linewidth=2, alpha=.9)
+            ax1.scatter(strokes_y[:,0,0], -strokes_y[:,0,1], c=gt, s=.9)
+            ax1.plot(strokes_y[:,0,0], -strokes_y[:,0,1], c=gt, label='true path', linewidth=2, alpha=.9)
         if lead_in:
-            ax1.scatter([strokes_y[lead_in,0,0]], [-strokes_y[lead_in,0,1]], c='r', marker='o', s=5, label='lead in')
+            ax1.scatter([strokes_y[lead_in,0,0]], [-strokes_y[lead_in,0,1]], c='r', marker='o', s=15, label='lead in')
 
     plt.legend()
     print('plotting %s'%name)

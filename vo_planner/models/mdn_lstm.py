@@ -49,8 +49,8 @@ class mdnLSTM(nn.Module):
         exp_pi = torch.exp(z_pi-max_pi)
         out_pi = exp_pi/torch.sum(exp_pi, dim=1, keepdim=True)
         # don't allow sigma to get too small
-        out_sigma1 = torch.exp(z_sigma1)+1e-4
-        out_sigma2 = torch.exp(z_sigma2)+1e-4
+        out_sigma1 = torch.exp(z_sigma1)+1e-3
+        out_sigma2 = torch.exp(z_sigma2)+1e-3
         out_corr = torch.tanh(z_corr)
         return out_pi, out_mu1, out_mu2, out_sigma1, out_sigma2, out_corr
 

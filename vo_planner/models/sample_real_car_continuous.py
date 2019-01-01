@@ -200,12 +200,12 @@ if __name__ == '__main__':
         for bn in range(data_loader.batch_size):
             strokes, ytrue = generate(x,y,k,num=args.num, teacher_force_predict=args.teacher_force, use_center=args.use_center, bn=bn, batch_size=args.batch_size, lead_in=args.lead_in)
             fname = get_plot_name(args.model_loadname, args.training, bn,args.use_center,args.teacher_force,args.batch_size, lead_in=args.lead_in)
-
             f,ax = plt.subplots(2,1)
-
-            ax[0].plot(xnp[:,bn,2]);
+            aaa = np.arange(xnp.shape[0])
+            ax[0].scatter(aaa,xnp[:,bn,2], s=20, alpha=.6);
+            ax[0].set_ylim([-.6,.6])
             ax[0].set_title('steer')
-            ax[1].plot(xnp[:,bn,3]);
+            ax[1].scatter(aaa,xnp[:,bn,3], s=20, alpha=.6);
             ax[1].set_title('thrust')
             plt.savefig('%saction%02d.png'%(pref,bn))
 

@@ -19,7 +19,7 @@ import torch # package for building functions with learnable parameters
 import torch.nn as nn # prebuilt functions specific to neural networks
 from torch.autograd import Variable # storing data while learning
 from mdn_lstm import mdnLSTM
-from utils import save_checkpoint, plot_strokes, get_dummy_data, DataLoader
+from utils import save_checkpoint, plot_strokes, get_dummy_data, DataLoader, load_sim_data
 rdn = np.random.RandomState(33)
 # TODO one-hot the action space?
 
@@ -136,7 +136,7 @@ if __name__ == '__main__':
         DEVICE = 'cuda'
     else:
         DEVICE = 'cpu'
-    data_loader = DataLoader(train_load_path='../data/train_2d_controller.npz',
+    data_loader = DataLoader(load_sim_data, train_load_path='../data/train_2d_controller.npz',
                                  test_load_path='../data/train_2d_controller.npz',
                                  batch_size=data_batch_size)
     if args.training:
